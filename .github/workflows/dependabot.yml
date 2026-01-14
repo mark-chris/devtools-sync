@@ -22,23 +22,3 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-```
-
----
-
-## Quick Reference: File Structure
-```
-devtools-sync/
-├── .github/
-│   ├── dependabot.yml
-│   └── workflows/
-│       ├── agent.yml
-│       ├── server.yml
-│       ├── dashboard.yml
-│       └── lint.yml
-├── agent/
-│   └── ...
-├── server/
-│   └── ...
-└── dashboard/
-    └── ...
