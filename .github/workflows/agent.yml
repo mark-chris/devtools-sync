@@ -1,0 +1,52 @@
+# .github/workflows/agent.yml
+name: Agent CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'agent/**'
+      - '.github/workflows/agent.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'agent/**'
+      - '.github/workflows/agent.yml'
+
+jobs:
+  build-agent:
+    name: Build & Test Agent
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./agent
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run tests
+        run: go test -v -race -coverprofile=coverage.out ./...
+
+      - name: Build (Linux)
+        run: go build -o bin/devtools-sync-agent ./cmd
+
+      - name: Build (Windows)
+        run: GOOS=windows GOARCH=amd64 go build -o bin/devtools-sync-agent.exe ./cmd
+
+      - name: Build (macOS)
+        run: GOOS=darwin GOARCH=amd64 go build -o bin/devtools-sync-agent-darwin ./cmd
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./agent/coverage.out
+          flags: agent
+        continue-on-error: true

@@ -1,0 +1,77 @@
+# DevTools Sync - Local Development Environment
+# 
+# Usage:
+#   Start all services:     docker compose -f docker-compose.dev.yml up
+#   Start database only:    docker compose -f docker-compose.dev.yml up postgres
+#   Stop all services:      docker compose -f docker-compose.dev.yml down
+#   Reset database:         docker compose -f docker-compose.dev.yml down -v
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL Database
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: devtools-sync-postgres
+    environment:
+      POSTGRES_USER: devtools
+      POSTGRES_PASSWORD: devtools-local-dev
+      POSTGRES_DB: devtools_sync
+    ports:
+      - "5432:5432"
+    volumes:
+      - devtools-pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U devtools -d devtools_sync"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Management Server (optional - can also run locally with `go run`)
+  # ---------------------------------------------------------------------------
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile.dev
+    container_name: devtools-sync-server
+    environment:
+      DATABASE_URL: postgres://devtools:devtools-local-dev@postgres:5432/devtools_sync?sslmode=disable
+      SERVER_PORT: "8080"
+      JWT_SECRET: local-dev-jwt-secret-not-for-production
+      LOG_LEVEL: debug
+      LOG_FORMAT: text
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      # Mount source for live reload (use with air or similar)
+      - ./server:/app
+    profiles:
+      - full  # Only starts with: docker compose --profile full up
+
+  # ---------------------------------------------------------------------------
+  # Dashboard (optional - can also run locally with `npm run dev`)
+  # ---------------------------------------------------------------------------
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile.dev
+    container_name: devtools-sync-dashboard
+    environment:
+      VITE_API_URL: http://localhost:8080/api/v1
+    ports:
+      - "5173:5173"
+    depends_on:
+      - server
+    volumes:
+      - ./dashboard:/app
+      - /app/node_modules  # Exclude node_modules from mount
+    profiles:
+      - full  # Only starts with: docker compose --profile full up
+
+volumes:
+  devtools-pg-data:
+    name: devtools-sync-pg-data
