@@ -43,3 +43,10 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./dashboard/coverage/lcov.info
+          flags: dashboard
+        continue-on-error: true

@@ -1,237 +1,217 @@
-# VS Code Extension Manager
+# DevTools Sync
 
-A powerful CLI tool for managing VS Code extensions across multiple profiles and machines. Save, sync, and restore your extension configurations with ease.
+[![Agent CI](https://github.com/mark-chris/devtools-sync/actions/workflows/agent.yml/badge.svg)](https://github.com/mark-chris/devtools-sync/actions/workflows/agent.yml)
+[![Server CI](https://github.com/mark-chris/devtools-sync/actions/workflows/server.yml/badge.svg)](https://github.com/mark-chris/devtools-sync/actions/workflows/server.yml)
+[![Dashboard CI](https://github.com/mark-chris/devtools-sync/actions/workflows/dashboard.yml/badge.svg)](https://github.com/mark-chris/devtools-sync/actions/workflows/dashboard.yml)
+[![Lint](https://github.com/mark-chris/devtools-sync/actions/workflows/lint.yml/badge.svg)](https://github.com/mark-chris/devtools-sync/actions/workflows/lint.yml)
+[![codecov](https://codecov.io/gh/mark-chris/devtools-sync/branch/main/graph/badge.svg)](https://codecov.io/gh/mark-chris/devtools-sync)
+
+A comprehensive platform for managing and synchronizing VS Code extensions across multiple machines and teams.
 
 ## Features
 
-- 📦 **Profile Management**: Create and manage multiple extension profiles
-- 🔄 **Sync Extensions**: Export and import extension lists across machines
-- 🎯 **Bulk Operations**: Install, uninstall, enable, and disable extensions in batches
-- 📊 **Smart Recommendations**: Get intelligent extension suggestions based on your workspace
-- 🔍 **Dependency Resolution**: Automatically handle extension dependencies
-- 📈 **Usage Analytics**: Track and optimize your extension usage
-- 🌐 **Team Collaboration**: Share extension profiles with your team
-- 🔒 **Conflict Detection**: Identify and resolve extension conflicts
+- 🔄 **Profile Management**: Create and manage multiple extension profiles
+- 🌐 **Cross-Machine Sync**: Keep your extensions synchronized across all your development machines
+- 👥 **Team Collaboration**: Share extension profiles with your team
+- 📊 **Extension Analytics**: Track extension usage and optimize your setup
+- 🔍 **Smart Recommendations**: Get intelligent extension suggestions based on your workspace
+- 🎯 **Bulk Operations**: Install, uninstall, and manage extensions in batches
+- 📈 **Conflict Detection**: Identify and resolve extension conflicts automatically
+- 🔒 **Secure Sync**: End-to-end encrypted synchronization of your extension data
 
-## Installation
+## Architecture
 
-```bash
-npm install -g vscode-ext-manager
-```
+DevTools Sync consists of three main components:
 
-Or with yarn:
-
-```bash
-yarn global add vscode-ext-manager
-```
+- **Agent** (Go): CLI tool that runs on developer workstations to manage local VS Code extensions
+- **Server** (Go): Backend API that handles authentication, profile storage, and synchronization
+- **Dashboard** (React): Web interface for managing profiles, teams, and viewing analytics
 
 ## Quick Start
 
+### Using the CLI Agent
+
 ```bash
-# Initialize extension manager
-vext init
+# Install the agent
+curl -fsSL https://raw.githubusercontent.com/mark-chris/devtools-sync/main/install.sh | sh
+
+# Initialize and login
+devtools-sync init
+devtools-sync auth login
 
 # Save your current extensions to a profile
-vext save my-profile
+devtools-sync profile save my-setup
 
-# List all profiles
-vext list
+# Sync to the server
+devtools-sync sync push
 
-# Load a profile
-vext load my-profile
-
-# Sync with remote storage
-vext sync push
-vext sync pull
+# On another machine, pull your profile
+devtools-sync sync pull
+devtools-sync profile load my-setup
 ```
+
+### Using the Dashboard
+
+Visit the dashboard at `https://devtools-sync.example.com` to:
+- Browse and manage your extension profiles
+- Create and manage teams
+- View extension usage analytics
+- Search and discover new extensions
+
+## Installation
+
+### CLI Agent
+
+**macOS/Linux:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/mark-chris/devtools-sync/main/install.sh | sh
+```
+
+**Windows (PowerShell):**
+```powershell
+iwr -useb https://raw.githubusercontent.com/mark-chris/devtools-sync/main/install.ps1 | iex
+```
+
+**From Source:**
+```bash
+git clone https://github.com/mark-chris/devtools-sync.git
+cd devtools-sync/agent
+go build -o devtools-sync-agent ./cmd
+```
+
+### Self-Hosting
+
+See the [deployment guide](docs/deployment.md) for instructions on hosting your own DevTools Sync server.
 
 ## Usage
 
 ### Profile Management
 
 ```bash
-# Create a new profile from current extensions
-vext save <profile-name>
-
-# Load a profile (installs missing extensions)
-vext load <profile-name>
+# Save current extensions to a new profile
+devtools-sync profile save work-setup
 
 # List all profiles
-vext list
+devtools-sync profile list
 
-# Delete a profile
-vext delete <profile-name>
+# Load a profile
+devtools-sync profile load work-setup
 
 # Show profile details
-vext show <profile-name>
-```
+devtools-sync profile show work-setup
 
-### Extension Operations
-
-```bash
-# Install extensions from a list
-vext install extension1 extension2 extension3
-
-# Uninstall extensions
-vext uninstall extension1 extension2
-
-# Update all extensions
-vext update
-
-# Search for extensions
-vext search "python"
+# Delete a profile
+devtools-sync profile delete old-setup
 ```
 
 ### Synchronization
 
 ```bash
-# Push profiles to remote storage
-vext sync push
+# Push local profiles to server
+devtools-sync sync push
 
-# Pull profiles from remote storage
-vext sync pull
+# Pull profiles from server
+devtools-sync sync pull
 
-# Configure sync settings
-vext config set sync.provider github
-vext config set sync.repo username/repo
-```
-
-### Recommendations
-
-```bash
-# Get extension recommendations for current workspace
-vext recommend
-
-# Get recommendations based on file types
-vext recommend --workspace-scan
-
-# Get popular extensions in a category
-vext recommend --category "Programming Languages"
-```
-
-### Analytics
-
-```bash
-# Show extension usage statistics
-vext stats
-
-# Identify unused extensions
-vext stats --unused
-
-# Show resource usage by extension
-vext stats --resources
+# Auto-sync (watches for changes)
+devtools-sync sync auto
 ```
 
 ### Team Collaboration
 
 ```bash
-# Export profile for sharing
-vext export my-profile --output team-extensions.json
+# Share a profile with your team
+devtools-sync team share my-profile team-name
 
-# Import a shared profile
-vext import team-extensions.json --name team-profile
+# Load a team profile
+devtools-sync team load team-profile
 
-# Generate team profile URL
-vext share my-profile
+# List team profiles
+devtools-sync team list
+```
+
+### Extension Operations
+
+```bash
+# Install extensions from a profile
+devtools-sync install my-profile
+
+# Search for extensions
+devtools-sync search "python"
+
+# Get recommendations
+devtools-sync recommend
 ```
 
 ## Configuration
 
-Configuration is stored in `~/.vscode-ext-manager/config.json`:
+Configuration is stored in `~/.devtools-sync/config.yaml`:
 
-```json
-{
-  "sync": {
-    "enabled": true,
-    "provider": "github",
-    "repo": "username/vscode-extensions",
-    "autoSync": false
-  },
-  "profiles": {
-    "default": "work"
-  },
-  "recommendations": {
-    "enabled": true,
-    "autoInstall": false
-  },
-  "updates": {
-    "autoCheck": true,
-    "autoInstall": false
-  }
-}
+```yaml
+server:
+  url: https://devtools-sync.example.com
+  api_key: your-api-key
+
+sync:
+  auto_sync: false
+  interval: 300  # seconds
+
+profiles:
+  default: work-setup
+
+logging:
+  level: info
+  file: ~/.devtools-sync/logs/agent.log
 ```
 
-### Sync Providers
+## Development
 
-- **GitHub**: Store profiles in a GitHub repository
-- **GitLab**: Store profiles in a GitLab repository
-- **Bitbucket**: Store profiles in a Bitbucket repository
-- **Local**: Store profiles locally (default)
+See [development.md](development.md) for detailed development setup instructions.
 
-## Profile Format
-
-Profiles are stored as JSON files with the following structure:
-
-```json
-{
-  "name": "my-profile",
-  "description": "My development setup",
-  "created": "2025-01-13T12:00:00Z",
-  "updated": "2025-01-13T12:00:00Z",
-  "extensions": [
-    {
-      "id": "ms-python.python",
-      "version": "2024.0.0",
-      "enabled": true
-    }
-  ],
-  "settings": {
-    "autoUpdate": true,
-    "syncSettings": false
-  }
-}
-```
-
-## Advanced Features
-
-### Custom Extension Sources
+### Quick Development Setup
 
 ```bash
-# Add a custom extension marketplace
-vext source add my-marketplace https://marketplace.example.com
+# Clone the repository
+git clone https://github.com/mark-chris/devtools-sync.git
+cd devtools-sync
 
-# Install from custom source
-vext install extension-name --source my-marketplace
+# Start PostgreSQL
+docker compose -f docker-compose.dev.yml up -d postgres
+
+# Terminal 1: Run the server
+cd server
+go run ./cmd serve
+
+# Terminal 2: Run the dashboard
+cd dashboard
+npm install
+npm run dev
+
+# Terminal 3: Build the agent
+cd agent
+go build -o bin/devtools-sync-agent ./cmd
 ```
 
-### Extension Presets
+### Running Tests
 
 ```bash
-# Apply a preset (predefined extension bundle)
-vext preset apply web-development
-vext preset apply data-science
-vext preset apply devops
+# Run all tests
+make test
 
-# List available presets
-vext preset list
+# Run tests for a specific component
+cd agent && go test ./...
+cd server && go test ./...
+cd dashboard && npm test
 ```
 
-### Workspace Integration
+## Documentation
 
-```bash
-# Save workspace-specific extensions
-vext workspace save
-
-# Load workspace extensions
-vext workspace load
-
-# Generate .vscode/extensions.json
-vext workspace export
-```
-
-## Roadmap
-
-See our [project roadmap](vscode_ext_manager_oss_plan.md) for upcoming features and development plans.
+- [API Reference](docs/api-reference.md)
+- [Architecture Overview](docs/architecture.md)
+- [Development Guide](development.md)
+- [Deployment Guide](docs/deployment.md)
+- [Contributing Guidelines](CONTRIBUTING.md)
+- [Security Policy](SECURITY.md)
 
 ## Contributing
 
@@ -243,20 +223,24 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for deta
 - Coding standards
 - Testing requirements
 
+## Project Status
+
+This project is under active development. See our [GitHub Projects board](https://github.com/users/mark-chris/projects/1) for current progress and roadmap.
+
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+MIT License - see [LICENSE.md](LICENSE.md) for details.
 
 ## Support
 
-- 📖 [Documentation](https://docs.vscode-ext-manager.dev)
-- 🐛 [Issue Tracker](https://github.com/yourusername/vscode-ext-manager/issues)
-- 💬 [Discussions](https://github.com/yourusername/vscode-ext-manager/discussions)
-- 🔔 [Changelog](CHANGELOG.md)
+- 📖 [Documentation](docs/)
+- 🐛 [Issue Tracker](https://github.com/mark-chris/devtools-sync/issues)
+- 💬 [Discussions](https://github.com/mark-chris/devtools-sync/discussions)
+- 📧 Email: support@devtools-sync.example.com
 
 ## Acknowledgments
 
-Built with ❤️ by the open-source community. Special thanks to all our contributors!
+Built with ❤️ for the developer community.
 
 ---
 
