@@ -56,7 +56,7 @@ jobs:
         run: go build -o bin/devtools-sync-server ./cmd
 
       - name: Upload coverage
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           files: ./server/coverage.out
           flags: server

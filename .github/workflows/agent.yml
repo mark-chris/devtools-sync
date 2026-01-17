@@ -45,7 +45,7 @@ jobs:
         run: GOOS=darwin GOARCH=amd64 go build -o bin/devtools-sync-agent-darwin ./cmd
 
       - name: Upload coverage
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           files: ./agent/coverage.out
           flags: agent
