@@ -61,7 +61,9 @@ func TestHealth(t *testing.T) {
 
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(tt.statusCode)
-				json.NewEncoder(w).Encode(tt.responseBody)
+				if err := json.NewEncoder(w).Encode(tt.responseBody); err != nil {
+					t.Fatalf("failed to encode response: %v", err)
+				}
 			}))
 			defer server.Close()
 
