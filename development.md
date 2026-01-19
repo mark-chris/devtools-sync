@@ -230,6 +230,109 @@ DATABASE_URL="sqlite://./devtools_sync.db" go run ./cmd serve
 
 Note: SQLite is suitable for development and small deployments only.
 
+## Docker Compose Development
+
+### Quick Start
+
+1. **Copy environment configuration**
+   ```bash
+   cp env.example .env.local
+   # Edit .env.local if you need custom values
+   ```
+
+2. **Start just the database (lightweight)**
+   ```bash
+   docker compose -f docker-compose.dev.yml up postgres
+   ```
+
+   Then run server and dashboard locally:
+   ```bash
+   # Terminal 1: Server
+   cd server && go run ./cmd
+
+   # Terminal 2: Dashboard
+   cd dashboard && npm install && npm run dev
+   ```
+
+3. **Start full stack (all containerized)**
+   ```bash
+   docker compose -f docker-compose.dev.yml --profile full up
+   ```
+
+   Access:
+   - Dashboard: http://localhost:5173
+   - Server API: http://localhost:8080
+   - Health Check: http://localhost:8080/health
+   - PostgreSQL: localhost:5432
+
+### Common Commands
+
+```bash
+# Start all services in foreground
+docker compose -f docker-compose.dev.yml --profile full up
+
+# Start all services in background
+docker compose -f docker-compose.dev.yml --profile full up -d
+
+# View logs
+docker compose -f docker-compose.dev.yml logs -f
+
+# View logs for specific service
+docker compose -f docker-compose.dev.yml logs -f server
+
+# Stop all services
+docker compose -f docker-compose.dev.yml down
+
+# Stop and remove volumes (resets database)
+docker compose -f docker-compose.dev.yml down -v
+
+# Rebuild containers after Dockerfile changes
+docker compose -f docker-compose.dev.yml --profile full build
+
+# Rebuild and start
+docker compose -f docker-compose.dev.yml --profile full up --build
+```
+
+### Hot Reload
+
+- **Server (Go)**: Air watches for `.go` file changes and automatically rebuilds
+- **Dashboard (React)**: Vite HMR updates browser instantly on file save
+- **Database**: Migrations run automatically when server starts
+
+### Troubleshooting
+
+**Services won't start:**
+```bash
+# Check service health
+docker compose -f docker-compose.dev.yml ps
+
+# Check logs for errors
+docker compose -f docker-compose.dev.yml logs
+```
+
+**Port conflicts:**
+```bash
+# Check what's using the ports
+sudo lsof -i :5432  # PostgreSQL
+sudo lsof -i :8080  # Server
+sudo lsof -i :5173  # Dashboard
+```
+
+**Database connection issues:**
+```bash
+# Verify PostgreSQL is healthy
+docker compose -f docker-compose.dev.yml exec postgres pg_isready -U devtools
+
+# Connect to database directly
+docker compose -f docker-compose.dev.yml exec postgres psql -U devtools -d devtools_sync
+```
+
+**Reset everything:**
+```bash
+# Nuclear option: remove all containers, volumes, and images
+docker compose -f docker-compose.dev.yml down -v --rmi local
+```
+
 ## Running Tests
 
 ### All Tests
