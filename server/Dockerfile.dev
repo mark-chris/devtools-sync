@@ -1,0 +1,25 @@
+FROM golang:1.21-alpine
+
+# Install system dependencies
+RUN apk add --no-cache git curl postgresql-client
+
+# Install Air for hot reload
+RUN go install github.com/cosmtrek/air@latest
+
+# Install golang-migrate for database migrations
+RUN go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+
+WORKDIR /app
+
+# Copy go.mod and go.sum if they exist (for dependency caching)
+# Note: This project is in early stages, so these may not exist yet
+COPY go.* ./
+RUN if [ -f go.mod ]; then go mod download; fi
+
+# Copy source code (via volume mount in docker-compose)
+COPY . .
+
+EXPOSE 8080
+
+# Use Air for hot reload
+CMD ["air", "-c", ".air.toml"]
