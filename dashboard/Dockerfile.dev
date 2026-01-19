@@ -1,0 +1,20 @@
+FROM node:20-alpine
+
+# Install curl for health checks
+RUN apk add --no-cache curl
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
+RUN npm install
+
+# Copy source code (via volume mount in docker-compose)
+COPY . .
+
+EXPOSE 5173
+
+# Run Vite dev server with host flag to allow external access
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
