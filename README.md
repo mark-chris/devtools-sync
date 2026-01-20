@@ -8,6 +8,10 @@
 
 A comprehensive platform for managing and synchronizing VS Code extensions across multiple machines and teams.
 
+## Project Status
+
+This project is under active development. See our [GitHub Projects board](https://github.com/users/mark-chris/projects/1) for current progress and roadmap.
+
 ## Features
 
 - 🔄 **Profile Management**: Create and manage multiple extension profiles
@@ -222,10 +226,6 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for deta
 - Submitting pull requests
 - Coding standards
 - Testing requirements
-
-## Project Status
-
-This project is under active development. See our [GitHub Projects board](https://github.com/users/mark-chris/projects/1) for current progress and roadmap.
 
 ## License
 
