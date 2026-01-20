@@ -2,8 +2,10 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -86,5 +88,85 @@ func TestHealth(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestReadLimitedResponse(t *testing.T) {
+	tests := []struct {
+		name      string
+		data      string
+		maxSize   int64
+		wantError error
+		wantLen   int
+	}{
+		{
+			name:      "response within limit",
+			data:      "hello world",
+			maxSize:   100,
+			wantError: nil,
+			wantLen:   11,
+		},
+		{
+			name:      "response at exact limit",
+			data:      "12345",
+			maxSize:   5,
+			wantError: nil,
+			wantLen:   5,
+		},
+		{
+			name:      "response exceeds limit",
+			data:      "this is too long",
+			maxSize:   5,
+			wantError: ErrResponseTooLarge,
+			wantLen:   0,
+		},
+		{
+			name:      "empty response",
+			data:      "",
+			maxSize:   100,
+			wantError: nil,
+			wantLen:   0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reader := strings.NewReader(tt.data)
+			body, err := readLimitedResponse(reader, tt.maxSize)
+
+			if tt.wantError != nil {
+				if !errors.Is(err, tt.wantError) {
+					t.Errorf("expected error %v, got %v", tt.wantError, err)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+
+			if len(body) != tt.wantLen {
+				t.Errorf("expected body length %d, got %d", tt.wantLen, len(body))
+			}
+		})
+	}
+}
+
+func TestHealthResponseTooLarge(t *testing.T) {
+	// Create a server that returns a response larger than MaxResponseSize
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		// Write more data than MaxResponseSize (1MB + extra)
+		largeData := strings.Repeat("x", int(MaxResponseSize)+1000)
+		w.Write([]byte(largeData))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL)
+	_, err := client.Health()
+
+	if !errors.Is(err, ErrResponseTooLarge) {
+		t.Errorf("expected ErrResponseTooLarge, got %v", err)
 	}
 }

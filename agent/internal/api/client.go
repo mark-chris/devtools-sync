@@ -2,11 +2,19 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"time"
 )
+
+// MaxResponseSize is the maximum allowed response body size (1MB)
+// This prevents memory exhaustion from malicious or misconfigured servers
+const MaxResponseSize = 1 << 20 // 1MB
+
+// ErrResponseTooLarge is returned when a server response exceeds MaxResponseSize
+var ErrResponseTooLarge = errors.New("response body exceeds maximum allowed size")
 
 // Client handles communication with the devtools-sync server
 type Client struct {
@@ -44,9 +52,9 @@ func (c *Client) Health() (*HealthResponse, error) {
 		return nil, fmt.Errorf("server returned status %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := readLimitedResponse(resp.Body, MaxResponseSize)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
+		return nil, err
 	}
 
 	var health HealthResponse
@@ -55,4 +63,20 @@ func (c *Client) Health() (*HealthResponse, error) {
 	}
 
 	return &health, nil
+}
+
+// readLimitedResponse reads up to maxSize bytes from the reader.
+// Returns ErrResponseTooLarge if the response exceeds the limit.
+func readLimitedResponse(r io.Reader, maxSize int64) ([]byte, error) {
+	limited := io.LimitReader(r, maxSize+1)
+	body, err := io.ReadAll(limited)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if int64(len(body)) > maxSize {
+		return nil, ErrResponseTooLarge
+	}
+
+	return body, nil
 }
