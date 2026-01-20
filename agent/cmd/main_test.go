@@ -18,8 +18,12 @@ func TestVersionConstant(t *testing.T) {
 
 func TestMainWithEnvironment(t *testing.T) {
 	// Test that environment variable is recognized
-	os.Setenv("DEVTOOLS_SYNC_SERVER_URL", "http://test:9090")
-	defer os.Unsetenv("DEVTOOLS_SYNC_SERVER_URL")
+	if err := os.Setenv("DEVTOOLS_SYNC_SERVER_URL", "http://test:9090"); err != nil {
+		t.Fatalf("failed to set environment variable: %v", err)
+	}
+	defer func() {
+		_ = os.Unsetenv("DEVTOOLS_SYNC_SERVER_URL")
+	}()
 
 	// This test verifies the environment is set correctly
 	// Main function execution is tested via integration tests

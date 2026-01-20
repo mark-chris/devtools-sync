@@ -46,7 +46,9 @@ func (c *Client) Health() (*HealthResponse, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to server: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("server returned status %d", resp.StatusCode)

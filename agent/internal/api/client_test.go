@@ -159,7 +159,7 @@ func TestHealthResponseTooLarge(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		// Write more data than MaxResponseSize (1MB + extra)
 		largeData := strings.Repeat("x", int(MaxResponseSize)+1000)
-		w.Write([]byte(largeData))
+		_, _ = w.Write([]byte(largeData))
 	}))
 	defer server.Close()
 

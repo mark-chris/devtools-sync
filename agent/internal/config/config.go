@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"strings"
 )
 
 // Config holds the agent configuration
@@ -64,6 +63,6 @@ func (c *Config) IsInsecure() bool {
 		return false
 	}
 
-	host := strings.Split(parsedURL.Host, ":")[0]
+	host := parsedURL.Hostname()
 	return host != "localhost" && host != "127.0.0.1" && host != "::1"
 }

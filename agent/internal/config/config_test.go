@@ -30,10 +30,14 @@ func TestLoad(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Set up environment
 			if tt.envValue != "" {
-				os.Setenv("DEVTOOLS_SYNC_SERVER_URL", tt.envValue)
-				defer os.Unsetenv("DEVTOOLS_SYNC_SERVER_URL")
+				if err := os.Setenv("DEVTOOLS_SYNC_SERVER_URL", tt.envValue); err != nil {
+					t.Fatalf("failed to set environment variable: %v", err)
+				}
+				defer func() {
+					_ = os.Unsetenv("DEVTOOLS_SYNC_SERVER_URL")
+				}()
 			} else {
-				os.Unsetenv("DEVTOOLS_SYNC_SERVER_URL")
+				_ = os.Unsetenv("DEVTOOLS_SYNC_SERVER_URL")
 			}
 
 			cfg, err := Load()
