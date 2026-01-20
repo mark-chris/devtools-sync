@@ -24,6 +24,7 @@ func main() {
 	log.Printf("Server starting on port %s", port)
 	log.Printf("Health endpoint: http://localhost:%s/health", port)
 
+	// nosemgrep: go.lang.security.audit.net.use-tls.use-tls -- TLS termination handled by reverse proxy in production
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
 		log.Fatal(err)
 	}
