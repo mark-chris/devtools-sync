@@ -257,7 +257,7 @@ server/migrations/
 ## Acceptance Criteria
 
 - [x] Design schema with relationships
-- [ ] Create initial migration files
-- [ ] Add seed data for development
+- [x] Create initial migration files
+- [x] Add seed data for development
 - [x] Document schema in docs/
-- [ ] Add database diagram
+- [x] Add database diagram
