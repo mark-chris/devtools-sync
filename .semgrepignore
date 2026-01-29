@@ -1,0 +1,4 @@
+# Semgrep ignore patterns
+
+# Development seed data contains intentional test credentials
+server/migrations/000010_seed_data.up.sql
