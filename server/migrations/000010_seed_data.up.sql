@@ -2,6 +2,7 @@
 -- Seed data for development environment only
 
 -- Users (password: devpassword123, bcrypt hash)
+-- nosemgrep: generic.secrets.security.detected-bcrypt-hash.detected-bcrypt-hash
 INSERT INTO users (id, email, password_hash, display_name, role) VALUES
   ('11111111-1111-1111-1111-111111111111', 'admin@example.com', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZRGdjGj/n3.QWHKjNC.5RILXPnZGW', 'Admin User', 'admin'),
   ('22222222-2222-2222-2222-222222222222', 'viewer@example.com', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZRGdjGj/n3.QWHKjNC.5RILXPnZGW', 'Viewer User', 'viewer');
