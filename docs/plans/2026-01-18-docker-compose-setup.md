@@ -18,7 +18,7 @@
 **Step 1: Create server development Dockerfile**
 
 ```dockerfile
-FROM golang:1.21-alpine
+FROM golang:1.24-alpine
 
 # Install system dependencies
 RUN apk add --no-cache git curl postgresql-client
@@ -142,7 +142,7 @@ git commit -m "feat(server): add Air config with auto-migrations"
 ```go
 module github.com/mark-chris/devtools-sync/server
 
-go 1.21
+go 1.24
 
 require (
 	github.com/lib/pq v1.10.9

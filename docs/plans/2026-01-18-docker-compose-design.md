@@ -44,7 +44,7 @@ docker compose -f docker-compose.dev.yml --profile full up
 
 #### server/Dockerfile.dev
 
-- Base: `golang:1.21-alpine`
+- Base: `golang:1.24-alpine`
 - Tools installed:
   - Air for hot reload
   - golang-migrate for database migrations
