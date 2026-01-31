@@ -205,9 +205,7 @@ func NewRefreshHandler(
 		// Update last_used_at
 		now := time.Now()
 		storedToken.LastUsedAt = &now
-		if err := updateRefreshToken(storedToken); err != nil {
-			// Log error but don't fail the request
-		}
+		_ = updateRefreshToken(storedToken) // Ignore error - don't fail request if update fails
 
 		// Return new access token
 		writeJSON(w, http.StatusOK, LoginResponse{
@@ -248,7 +246,7 @@ func NewLogoutHandler(
 			// Revoke the token
 			now := time.Now()
 			storedToken.RevokedAt = &now
-			revokeRefreshToken(storedToken)
+			_ = revokeRefreshToken(storedToken) // Ignore error - logout is idempotent
 		}
 
 		// Clear cookie regardless of token validity (idempotent)
@@ -277,5 +275,5 @@ func clearRefreshTokenCookie(w http.ResponseWriter) {
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
+	_ = json.NewEncoder(w).Encode(data) // Ignore error - response already started
 }

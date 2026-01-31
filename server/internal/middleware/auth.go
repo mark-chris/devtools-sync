@@ -9,6 +9,11 @@ import (
 	"github.com/mark-chris/devtools-sync/server/internal/auth"
 )
 
+// contextKey is a custom type for context keys to avoid collisions
+type contextKey string
+
+const userContextKey contextKey = "user"
+
 // UserGetter is a function that retrieves a user by ID
 type UserGetter func(userID string) (*auth.User, error)
 
@@ -55,7 +60,7 @@ func RequireAuth(authService *auth.AuthService, userGetter UserGetter) func(http
 			}
 
 			// Attach user to context
-			ctx := context.WithValue(r.Context(), "user", user)
+			ctx := context.WithValue(r.Context(), userContextKey, user)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -72,7 +77,7 @@ func RequireRole(minRole string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Get user from context (set by RequireAuth)
-			user, ok := r.Context().Value("user").(*auth.User)
+			user, ok := r.Context().Value(userContextKey).(*auth.User)
 			if !ok {
 				writeJSON(w, http.StatusUnauthorized, map[string]string{
 					"error": "User not found in context",
@@ -100,5 +105,5 @@ func RequireRole(minRole string) func(http.Handler) http.Handler {
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
+	_ = json.NewEncoder(w).Encode(data) // Ignore error - response already started
 }

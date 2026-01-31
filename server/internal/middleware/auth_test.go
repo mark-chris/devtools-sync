@@ -36,7 +36,7 @@ func TestRequireAuth_ValidToken(t *testing.T) {
 		handlerCalled = true
 
 		// Verify user is in context
-		ctxUser, ok := r.Context().Value("user").(*auth.User)
+		ctxUser, ok := r.Context().Value(userContextKey).(*auth.User)
 		if !ok {
 			t.Error("user not found in context")
 			return
@@ -260,7 +260,7 @@ func TestRequireRole_SufficientRole(t *testing.T) {
 	handler := middleware(testHandler)
 
 	req := httptest.NewRequest("GET", "/test", nil)
-	req = req.WithContext(context.WithValue(req.Context(), "user", user))
+	req = req.WithContext(context.WithValue(req.Context(), userContextKey, user))
 	w := httptest.NewRecorder()
 
 	// Act
@@ -294,7 +294,7 @@ func TestRequireRole_InsufficientRole(t *testing.T) {
 	handler := middleware(testHandler)
 
 	req := httptest.NewRequest("GET", "/test", nil)
-	req = req.WithContext(context.WithValue(req.Context(), "user", user))
+	req = req.WithContext(context.WithValue(req.Context(), userContextKey, user))
 	w := httptest.NewRecorder()
 
 	// Act
@@ -347,7 +347,7 @@ func TestRequireRole_Hierarchy(t *testing.T) {
 			handler := middleware(testHandler)
 
 			req := httptest.NewRequest("GET", "/test", nil)
-			req = req.WithContext(context.WithValue(req.Context(), "user", user))
+			req = req.WithContext(context.WithValue(req.Context(), userContextKey, user))
 			w := httptest.NewRecorder()
 
 			handler.ServeHTTP(w, req)

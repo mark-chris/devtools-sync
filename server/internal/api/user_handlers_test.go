@@ -15,7 +15,7 @@ import (
 
 // Helper function to add user to context
 func contextWithUser(ctx context.Context, user *auth.User) context.Context {
-	return context.WithValue(ctx, "user", user)
+	return context.WithValue(ctx, userContextKey, user)
 }
 
 // RED: Test creating invite as admin

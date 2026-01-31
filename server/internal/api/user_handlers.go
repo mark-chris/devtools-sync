@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"regexp"
@@ -9,6 +10,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/mark-chris/devtools-sync/server/internal/auth"
 )
+
+// contextKey is a custom type for context keys to avoid collisions
+type contextKey string
+
+const userContextKey contextKey = "user"
 
 // StoreInviteFunc is a function that stores a user invite
 type StoreInviteFunc func(invite *auth.UserInvite) error
@@ -33,7 +39,7 @@ func NewInviteHandler(
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Get user from context (set by RequireAuth middleware)
-		user, ok := r.Context().Value("user").(*auth.User)
+		user, ok := r.Context().Value(userContextKey).(*auth.User)
 		if !ok {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{
 				"error": "User not found in context",
@@ -214,9 +220,7 @@ func NewAcceptInviteHandler(
 
 		// Mark invite as accepted
 		invite.AcceptedAt = &now
-		if err := markInviteAccepted(invite); err != nil {
-			// Log error but don't fail the request - user was already created
-		}
+		_ = markInviteAccepted(invite) // Ignore error - user already created, invite update is best-effort
 
 		writeJSON(w, http.StatusOK, AcceptInviteResponse{
 			Message: "Account created successfully",

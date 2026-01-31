@@ -26,7 +26,7 @@ func ValidatePassword(password string) error {
 		}
 	}
 
-	if !(hasUpper && hasLower && hasNumber && hasSpecial) {
+	if !hasUpper || !hasLower || !hasNumber || !hasSpecial {
 		return errors.New("password must contain uppercase, lowercase, number, and special character")
 	}
 
