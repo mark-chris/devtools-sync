@@ -27,6 +27,10 @@ jobs:
       postgres:
         image: postgres:16
         env:
+          # nosemgrep: generic.secrets.security.detected-generic-secret.detected-generic-secret
+          # These are ephemeral test credentials for CI only. The PostgreSQL
+          # container is created and destroyed for each workflow run and is
+          # never exposed outside the GitHub Actions runner environment.
           POSTGRES_USER: test
           POSTGRES_PASSWORD: test
           POSTGRES_DB: devtools_sync_test
@@ -52,6 +56,8 @@ jobs:
       - name: Run tests
         run: go test -v -race -coverprofile=coverage.out ./...
         env:
+          # nosemgrep: generic.secrets.security.detected-generic-secret.detected-generic-secret
+          # Ephemeral test credentials matching the CI PostgreSQL service above
           DATABASE_URL: postgres://test:test@localhost:5432/devtools_sync_test?sslmode=disable
 
       - name: Build
