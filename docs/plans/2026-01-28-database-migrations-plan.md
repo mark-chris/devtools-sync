@@ -481,6 +481,10 @@ git commit -m "feat(db): add audit_log table migration"
 -- 000010_seed_data.up.sql
 -- Seed data for development environment only
 
+-- nosemgrep: generic.secrets.security.detected-bcrypt-hash.detected-bcrypt-hash
+-- These are example bcrypt hashes for documentation purposes only.
+-- They demonstrate the seed data format and are not used in production.
+-- The plain-text password is "devpassword123" (documented for dev use).
 -- Users (password: devpassword123, bcrypt hash)
 INSERT INTO users (id, email, password_hash, display_name, role) VALUES
   ('11111111-1111-1111-1111-111111111111', 'admin@example.com', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZRGdjGj/n3.QWHKjNC.5RILXPnZGW', 'Admin User', 'admin'),
