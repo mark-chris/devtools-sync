@@ -3,5 +3,8 @@
 # Development seed data contains intentional test credentials
 server/migrations/000010_seed_data.up.sql
 
+# Documentation files with example data
+docs/plans/2026-01-28-database-migrations-plan.md
+
 # Test files - mock servers and test utilities don't need XSS protection
 *_test.go
