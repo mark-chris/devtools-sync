@@ -350,10 +350,11 @@ All recommended security tools have been implemented as GitHub Actions workflows
    - Scans full git history
    - Runs on all pushes and PRs
 
-4. **`.github/workflows/codeql.yml`**
-   - Semantic code analysis for Go and JavaScript
-   - Security and quality query suites
-   - Weekly scheduled scans
+4. **CodeQL Analysis** (GitHub Default Setup)
+   - Enabled via repository settings (not custom workflow)
+   - Automatic semantic code analysis for Go and JavaScript
+   - Runs on pushes, PRs, and weekly schedule
+   - Note: Default setup cannot coexist with custom workflows
 
 5. **`.github/workflows/container-scan.yml`**
    - Trivy scanning for Docker images
