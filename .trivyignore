@@ -15,3 +15,32 @@
 # Date: 2026-02-01
 # Review: When Debian backports fix to stable/testing distroless images
 CVE-2026-0861
+
+# CVE-2025-15281: glibc wordexp uninitialized memory
+# Justification:
+#   - CVSS 7.5 (HIGH) - wordexp with WRDE_REUSE+WRDE_APPEND may return uninitialized memory
+#   - DoS impact: process may abort if caller inspects we_wordv or calls wordfree
+#   - Application does not use wordexp() function
+#   - Fixed in upstream glibc 2.42+, not yet backported to Debian 12/13
+#   - Affects nodejs20-debian13 distroless base image only
+# References:
+#   - https://nvd.nist.gov/vuln/detail/CVE-2025-15281
+#   - https://security.snyk.io/vuln/SNYK-DEBIAN13-GLIBC-15044345
+# Date: 2026-02-01
+# Review: When Debian backports fix to stable/testing distroless images
+CVE-2025-15281
+
+# CVE-2026-0915: glibc information disclosure via DNS
+# Justification:
+#   - Debian security team marked as "no-dsa" (Minor issue)
+#   - MODERATE severity - information disclosure via zero-valued network queries
+#   - Limited confidentiality loss, potential ASLR bypass helper
+#   - Bug existed since 1996, fixed in glibc 2.42+
+#   - Not yet backported to Debian 12/13
+#   - Affects nodejs20-debian13 distroless base image only
+# References:
+#   - https://security-tracker.debian.org/tracker/CVE-2026-0915
+#   - http://www.mail-archive.com/debian-glibc@lists.debian.org/msg64187.html
+# Date: 2026-02-01
+# Review: When Debian backports fix to stable/testing distroless images
+CVE-2026-0915
