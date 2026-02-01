@@ -17,6 +17,8 @@ jobs:
   build-dashboard:
     name: Build & Test Dashboard
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     defaults:
       run:
         working-directory: ./dashboard

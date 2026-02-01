@@ -17,6 +17,8 @@ jobs:
   build-agent:
     name: Build & Test Agent
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     defaults:
       run:
         working-directory: ./agent

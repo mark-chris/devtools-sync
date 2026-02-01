@@ -11,6 +11,8 @@ jobs:
   lint:
     name: Lint All
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - uses: actions/checkout@v6

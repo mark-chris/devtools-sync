@@ -17,6 +17,8 @@ jobs:
   build-server:
     name: Build & Test Server
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     defaults:
       run:
         working-directory: ./server
