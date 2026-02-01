@@ -1,0 +1,17 @@
+# Trivy vulnerability suppressions
+# See: https://trivy.dev/docs/latest/configuration/filtering/#trivyignore
+
+# CVE-2026-0861: glibc integer overflow in memalign
+# Justification:
+#   - Debian security team classified as "no-dsa" (Minor issue, no security advisory)
+#   - Low exploitability: requires attacker control over both size and alignment
+#     arguments to memalign(), which is typically not attacker-controlled
+#   - Fixed in upstream glibc 2.42-8, but not yet backported to Debian 12 or 13
+#   - Affects nodejs20-debian13 distroless base image only
+#   - Server container (distroless/static-debian12) has zero vulnerabilities
+# References:
+#   - https://security-tracker.debian.org/tracker/CVE-2026-0861
+#   - http://www.mail-archive.com/debian-glibc@lists.debian.org/msg64181.html
+# Date: 2026-02-01
+# Review: When Debian backports fix to stable/testing distroless images
+CVE-2026-0861
