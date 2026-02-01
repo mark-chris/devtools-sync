@@ -1,0 +1,66 @@
+# .github/workflows/license-check.yml
+name: License Compliance
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'agent/go.mod'
+      - 'server/go.mod'
+      - 'dashboard/package.json'
+      - '.github/workflows/license-check.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'agent/go.mod'
+      - 'server/go.mod'
+      - 'dashboard/package.json'
+  schedule:
+    - cron: '0 0 * * 0'  # Weekly on Sunday
+
+jobs:
+  go-licenses:
+    name: Check Go Licenses
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        directory: [agent, server]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.24'
+
+      - name: Install go-licenses
+        run: go install github.com/google/go-licenses@latest
+
+      - name: Check licenses
+        working-directory: ${{ matrix.directory }}
+        run: |
+          go-licenses check ./... --disallowed_types=forbidden,restricted
+
+  npm-licenses:
+    name: Check npm Licenses
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: ./dashboard
+        run: npm ci
+
+      - name: Check licenses
+        working-directory: ./dashboard
+        run: |
+          npx license-checker --production --failOn 'GPL;AGPL;LGPL' --summary

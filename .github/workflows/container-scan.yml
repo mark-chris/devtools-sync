@@ -1,0 +1,74 @@
+# .github/workflows/container-scan.yml
+name: Container Security Scan
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**/Dockerfile*'
+      - 'docker-compose*.yml'
+      - '.github/workflows/container-scan.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - '**/Dockerfile*'
+      - 'docker-compose*.yml'
+  schedule:
+    - cron: '0 8 * * 1'  # Weekly on Monday at 8 AM UTC
+
+jobs:
+  trivy-server:
+    name: Scan Server Container
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build server image
+        run: docker build -f server/Dockerfile.dev -t devtools-server:test ./server
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'devtools-server:test'
+          format: 'sarif'
+          output: 'trivy-server-results.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+
+      - name: Upload Trivy scan results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-server-results.sarif'
+          category: 'trivy-server'
+
+  trivy-dashboard:
+    name: Scan Dashboard Container
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build dashboard image
+        run: docker build -f dashboard/Dockerfile.dev -t devtools-dashboard:test ./dashboard
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'devtools-dashboard:test'
+          format: 'sarif'
+          output: 'trivy-dashboard-results.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+
+      - name: Upload Trivy scan results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-dashboard-results.sarif'
+          category: 'trivy-dashboard'

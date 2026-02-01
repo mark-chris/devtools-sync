@@ -1,0 +1,54 @@
+# .github/workflows/sbom.yml
+name: Generate SBOM
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:  # Allow manual trigger
+  schedule:
+    - cron: '0 0 1 * *'  # Monthly on the 1st
+
+jobs:
+  sbom:
+    name: Generate Software Bill of Materials
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Generate SBOM for Server
+        uses: anchore/sbom-action@v0
+        with:
+          path: ./server
+          format: spdx-json
+          output-file: sbom-server.spdx.json
+
+      - name: Generate SBOM for Agent
+        uses: anchore/sbom-action@v0
+        with:
+          path: ./agent
+          format: spdx-json
+          output-file: sbom-agent.spdx.json
+
+      - name: Generate SBOM for Dashboard
+        uses: anchore/sbom-action@v0
+        with:
+          path: ./dashboard
+          format: spdx-json
+          output-file: sbom-dashboard.spdx.json
+
+      - name: Upload SBOM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ github.sha }}
+          path: |
+            sbom-*.spdx.json
+          retention-days: 90
+
+      - name: Attach SBOMs to release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            sbom-*.spdx.json
