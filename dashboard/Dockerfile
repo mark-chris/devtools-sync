@@ -21,8 +21,8 @@ RUN npm run build
 # Production dependencies only
 RUN npm ci --omit=dev
 
-# Final stage - distroless Node.js
-FROM gcr.io/distroless/nodejs20-debian12:nonroot
+# Final stage - distroless Node.js (debian13 for CVE-2026-0861 fix)
+FROM gcr.io/distroless/nodejs20-debian13:nonroot
 
 # Set working directory
 WORKDIR /app
