@@ -1,0 +1,34 @@
+# .dockerignore for server
+
+# Git
+.git
+.gitignore
+
+# Development
+.air.toml
+tmp/
+*.log
+
+# Testing
+*_test.go
+testdata/
+
+# Build artifacts
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Documentation
+README.md
+docs/
+
+# CI/CD
+.github/

@@ -26,17 +26,17 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Build server image
-        run: docker build -f server/Dockerfile.dev -t devtools-server:test ./server
+      - name: Build production server image
+        run: docker build -f server/Dockerfile -t devtools-server:prod ./server
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: 'devtools-server:test'
+          image-ref: 'devtools-server:prod'
           format: 'sarif'
           output: 'trivy-server-results.sarif'
           severity: 'CRITICAL,HIGH'
-          exit-code: '1'
+          exit-code: '1'  # Fail on findings - distroless should have minimal/no vulnerabilities
 
       - name: Upload Trivy scan results to GitHub Security
         uses: github/codeql-action/upload-sarif@v3
@@ -54,17 +54,17 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Build dashboard image
-        run: docker build -f dashboard/Dockerfile.dev -t devtools-dashboard:test ./dashboard
+      - name: Build production dashboard image
+        run: docker build -f dashboard/Dockerfile -t devtools-dashboard:prod ./dashboard
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: 'devtools-dashboard:test'
+          image-ref: 'devtools-dashboard:prod'
           format: 'sarif'
           output: 'trivy-dashboard-results.sarif'
           severity: 'CRITICAL,HIGH'
-          exit-code: '1'
+          exit-code: '1'  # Fail on findings - distroless should have minimal/no vulnerabilities
 
       - name: Upload Trivy scan results to GitHub Security
         uses: github/codeql-action/upload-sarif@v3

@@ -3,8 +3,8 @@ FROM golang:1.24-alpine
 # Install system dependencies
 RUN apk add --no-cache git curl postgresql-client
 
-# Install Air for hot reload
-RUN go install github.com/cosmtrek/air@latest
+# Install Air for hot reload (pinned version compatible with Go 1.24)
+RUN go install github.com/cosmtrek/air@v1.61.1
 
 # Install golang-migrate for database migrations
 RUN go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest

@@ -1,0 +1,39 @@
+# .dockerignore for dashboard
+
+# Git
+.git
+.gitignore
+
+# Dependencies (will be installed in container)
+node_modules/
+
+# Development
+.env.local
+.env.development
+*.log
+npm-debug.log*
+
+# Testing
+coverage/
+.nyc_output/
+**/*.test.js
+**/*.test.jsx
+**/*.spec.js
+**/*.spec.jsx
+
+# Build (will be built in container)
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Documentation
+README.md
+docs/
+
+# CI/CD
+.github/
