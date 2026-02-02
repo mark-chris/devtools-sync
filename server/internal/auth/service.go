@@ -60,10 +60,28 @@ func (s *AuthService) ValidateAccessToken(tokenString string) (*Claims, error) {
 		return nil, jwt.ErrTokenInvalidClaims
 	}
 
+	// Extract and validate "sub" claim
+	sub, ok := claimsMap["sub"].(string)
+	if !ok || sub == "" {
+		return nil, jwt.ErrTokenInvalidClaims
+	}
+
+	// Extract and validate "email" claim
+	email, ok := claimsMap["email"].(string)
+	if !ok || email == "" {
+		return nil, jwt.ErrTokenInvalidClaims
+	}
+
+	// Extract and validate "role" claim
+	role, ok := claimsMap["role"].(string)
+	if !ok || role == "" {
+		return nil, jwt.ErrTokenInvalidClaims
+	}
+
 	return &Claims{
-		UserID: claimsMap["sub"].(string),
-		Email:  claimsMap["email"].(string),
-		Role:   claimsMap["role"].(string),
+		UserID: sub,
+		Email:  email,
+		Role:   role,
 	}, nil
 }
 

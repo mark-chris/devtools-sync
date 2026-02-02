@@ -363,3 +363,306 @@ func TestHashToken_Deterministic(t *testing.T) {
 		t.Error("HashToken() produced different hashes for same token, want deterministic")
 	}
 }
+
+// RED: Test JWT validation with missing "sub" claim
+func TestValidateAccessToken_MissingSubClaim(t *testing.T) {
+	// Setup
+	secretKey := []byte("test-secret-key-min-32-bytes-long!")
+	service := NewAuthService(secretKey)
+
+	// Create token without "sub" claim
+	claims := jwt.MapClaims{
+		"email": "test@example.com",
+		"role":  "admin",
+		"iat":   time.Now().Unix(),
+		"exp":   time.Now().Add(15 * time.Minute).Unix(),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString(secretKey)
+	if err != nil {
+		t.Fatalf("setup failed: token.SignedString() error = %v", err)
+	}
+
+	// Act
+	parsedClaims, err := service.ValidateAccessToken(tokenString)
+
+	// Assert
+	if err == nil {
+		t.Fatal("ValidateAccessToken() error = nil, want error for missing 'sub' claim")
+	}
+
+	if parsedClaims != nil {
+		t.Errorf("ValidateAccessToken() claims = %v, want nil", parsedClaims)
+	}
+}
+
+// RED: Test JWT validation with missing "email" claim
+func TestValidateAccessToken_MissingEmailClaim(t *testing.T) {
+	// Setup
+	secretKey := []byte("test-secret-key-min-32-bytes-long!")
+	service := NewAuthService(secretKey)
+
+	// Create token without "email" claim
+	claims := jwt.MapClaims{
+		"sub":  uuid.New().String(),
+		"role": "admin",
+		"iat":  time.Now().Unix(),
+		"exp":  time.Now().Add(15 * time.Minute).Unix(),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString(secretKey)
+	if err != nil {
+		t.Fatalf("setup failed: token.SignedString() error = %v", err)
+	}
+
+	// Act
+	parsedClaims, err := service.ValidateAccessToken(tokenString)
+
+	// Assert
+	if err == nil {
+		t.Fatal("ValidateAccessToken() error = nil, want error for missing 'email' claim")
+	}
+
+	if parsedClaims != nil {
+		t.Errorf("ValidateAccessToken() claims = %v, want nil", parsedClaims)
+	}
+}
+
+// RED: Test JWT validation with missing "role" claim
+func TestValidateAccessToken_MissingRoleClaim(t *testing.T) {
+	// Setup
+	secretKey := []byte("test-secret-key-min-32-bytes-long!")
+	service := NewAuthService(secretKey)
+
+	// Create token without "role" claim
+	claims := jwt.MapClaims{
+		"sub":   uuid.New().String(),
+		"email": "test@example.com",
+		"iat":   time.Now().Unix(),
+		"exp":   time.Now().Add(15 * time.Minute).Unix(),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString(secretKey)
+	if err != nil {
+		t.Fatalf("setup failed: token.SignedString() error = %v", err)
+	}
+
+	// Act
+	parsedClaims, err := service.ValidateAccessToken(tokenString)
+
+	// Assert
+	if err == nil {
+		t.Fatal("ValidateAccessToken() error = nil, want error for missing 'role' claim")
+	}
+
+	if parsedClaims != nil {
+		t.Errorf("ValidateAccessToken() claims = %v, want nil", parsedClaims)
+	}
+}
+
+// RED: Test JWT validation with wrong type for "sub" claim
+func TestValidateAccessToken_WrongTypeSubClaim(t *testing.T) {
+	// Setup
+	secretKey := []byte("test-secret-key-min-32-bytes-long!")
+	service := NewAuthService(secretKey)
+
+	// Create token with numeric "sub" instead of string
+	claims := jwt.MapClaims{
+		"sub":   12345, // Wrong type - should be string
+		"email": "test@example.com",
+		"role":  "admin",
+		"iat":   time.Now().Unix(),
+		"exp":   time.Now().Add(15 * time.Minute).Unix(),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString(secretKey)
+	if err != nil {
+		t.Fatalf("setup failed: token.SignedString() error = %v", err)
+	}
+
+	// Act
+	parsedClaims, err := service.ValidateAccessToken(tokenString)
+
+	// Assert
+	if err == nil {
+		t.Fatal("ValidateAccessToken() error = nil, want error for wrong type 'sub' claim")
+	}
+
+	if parsedClaims != nil {
+		t.Errorf("ValidateAccessToken() claims = %v, want nil", parsedClaims)
+	}
+}
+
+// RED: Test JWT validation with wrong type for "email" claim
+func TestValidateAccessToken_WrongTypeEmailClaim(t *testing.T) {
+	// Setup
+	secretKey := []byte("test-secret-key-min-32-bytes-long!")
+	service := NewAuthService(secretKey)
+
+	// Create token with boolean "email" instead of string
+	claims := jwt.MapClaims{
+		"sub":   uuid.New().String(),
+		"email": true, // Wrong type - should be string
+		"role":  "admin",
+		"iat":   time.Now().Unix(),
+		"exp":   time.Now().Add(15 * time.Minute).Unix(),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString(secretKey)
+	if err != nil {
+		t.Fatalf("setup failed: token.SignedString() error = %v", err)
+	}
+
+	// Act
+	parsedClaims, err := service.ValidateAccessToken(tokenString)
+
+	// Assert
+	if err == nil {
+		t.Fatal("ValidateAccessToken() error = nil, want error for wrong type 'email' claim")
+	}
+
+	if parsedClaims != nil {
+		t.Errorf("ValidateAccessToken() claims = %v, want nil", parsedClaims)
+	}
+}
+
+// RED: Test JWT validation with wrong type for "role" claim
+func TestValidateAccessToken_WrongTypeRoleClaim(t *testing.T) {
+	// Setup
+	secretKey := []byte("test-secret-key-min-32-bytes-long!")
+	service := NewAuthService(secretKey)
+
+	// Create token with array "role" instead of string
+	claims := jwt.MapClaims{
+		"sub":   uuid.New().String(),
+		"email": "test@example.com",
+		"role":  []string{"admin", "user"}, // Wrong type - should be string
+		"iat":   time.Now().Unix(),
+		"exp":   time.Now().Add(15 * time.Minute).Unix(),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString(secretKey)
+	if err != nil {
+		t.Fatalf("setup failed: token.SignedString() error = %v", err)
+	}
+
+	// Act
+	parsedClaims, err := service.ValidateAccessToken(tokenString)
+
+	// Assert
+	if err == nil {
+		t.Fatal("ValidateAccessToken() error = nil, want error for wrong type 'role' claim")
+	}
+
+	if parsedClaims != nil {
+		t.Errorf("ValidateAccessToken() claims = %v, want nil", parsedClaims)
+	}
+}
+
+// RED: Test JWT validation with empty "sub" claim
+func TestValidateAccessToken_EmptySubClaim(t *testing.T) {
+	// Setup
+	secretKey := []byte("test-secret-key-min-32-bytes-long!")
+	service := NewAuthService(secretKey)
+
+	// Create token with empty "sub"
+	claims := jwt.MapClaims{
+		"sub":   "", // Empty string
+		"email": "test@example.com",
+		"role":  "admin",
+		"iat":   time.Now().Unix(),
+		"exp":   time.Now().Add(15 * time.Minute).Unix(),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString(secretKey)
+	if err != nil {
+		t.Fatalf("setup failed: token.SignedString() error = %v", err)
+	}
+
+	// Act
+	parsedClaims, err := service.ValidateAccessToken(tokenString)
+
+	// Assert
+	if err == nil {
+		t.Fatal("ValidateAccessToken() error = nil, want error for empty 'sub' claim")
+	}
+
+	if parsedClaims != nil {
+		t.Errorf("ValidateAccessToken() claims = %v, want nil", parsedClaims)
+	}
+}
+
+// RED: Test JWT validation with empty "email" claim
+func TestValidateAccessToken_EmptyEmailClaim(t *testing.T) {
+	// Setup
+	secretKey := []byte("test-secret-key-min-32-bytes-long!")
+	service := NewAuthService(secretKey)
+
+	// Create token with empty "email"
+	claims := jwt.MapClaims{
+		"sub":   uuid.New().String(),
+		"email": "", // Empty string
+		"role":  "admin",
+		"iat":   time.Now().Unix(),
+		"exp":   time.Now().Add(15 * time.Minute).Unix(),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString(secretKey)
+	if err != nil {
+		t.Fatalf("setup failed: token.SignedString() error = %v", err)
+	}
+
+	// Act
+	parsedClaims, err := service.ValidateAccessToken(tokenString)
+
+	// Assert
+	if err == nil {
+		t.Fatal("ValidateAccessToken() error = nil, want error for empty 'email' claim")
+	}
+
+	if parsedClaims != nil {
+		t.Errorf("ValidateAccessToken() claims = %v, want nil", parsedClaims)
+	}
+}
+
+// RED: Test JWT validation with empty "role" claim
+func TestValidateAccessToken_EmptyRoleClaim(t *testing.T) {
+	// Setup
+	secretKey := []byte("test-secret-key-min-32-bytes-long!")
+	service := NewAuthService(secretKey)
+
+	// Create token with empty "role"
+	claims := jwt.MapClaims{
+		"sub":   uuid.New().String(),
+		"email": "test@example.com",
+		"role":  "", // Empty string
+		"iat":   time.Now().Unix(),
+		"exp":   time.Now().Add(15 * time.Minute).Unix(),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString(secretKey)
+	if err != nil {
+		t.Fatalf("setup failed: token.SignedString() error = %v", err)
+	}
+
+	// Act
+	parsedClaims, err := service.ValidateAccessToken(tokenString)
+
+	// Assert
+	if err == nil {
+		t.Fatal("ValidateAccessToken() error = nil, want error for empty 'role' claim")
+	}
+
+	if parsedClaims != nil {
+		t.Errorf("ValidateAccessToken() claims = %v, want nil", parsedClaims)
+	}
+}
