@@ -1,7 +1,7 @@
 package middleware
 
 import (
-	"fmt"
+	"encoding/json"
 	"net/http"
 )
 
@@ -33,7 +33,10 @@ func HandleMaxBytesError(w http.ResponseWriter, err error, maxBytes int64) bool 
 	if err.Error() == "http: request body too large" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusRequestEntityTooLarge)
-		fmt.Fprintf(w, `{"error":"Request body too large","max_size_bytes":%d}`, maxBytes)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":          "Request body too large",
+			"max_size_bytes": maxBytes,
+		})
 		return true
 	}
 
