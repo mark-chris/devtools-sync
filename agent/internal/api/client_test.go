@@ -170,3 +170,210 @@ func TestHealthResponseTooLarge(t *testing.T) {
 		t.Errorf("expected ErrResponseTooLarge, got %v", err)
 	}
 }
+
+func TestUploadProfile(t *testing.T) {
+	tests := []struct {
+		name       string
+		statusCode int
+		wantError  bool
+	}{
+		{
+			name:       "successful upload",
+			statusCode: http.StatusOK,
+			wantError:  false,
+		},
+		{
+			name:       "successful upload with 201",
+			statusCode: http.StatusCreated,
+			wantError:  false,
+		},
+		{
+			name:       "server error",
+			statusCode: http.StatusInternalServerError,
+			wantError:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/api/v1/profiles" {
+					t.Errorf("expected path /api/v1/profiles, got %s", r.URL.Path)
+				}
+				if r.Method != http.MethodPost {
+					t.Errorf("expected method POST, got %s", r.Method)
+				}
+
+				w.WriteHeader(tt.statusCode)
+			}))
+			defer server.Close()
+
+			client := NewClient(server.URL)
+			testProfile := &Profile{
+				Name:       "test",
+				Extensions: []Extension{{ID: "ext1", Version: "1.0.0", Enabled: true}},
+			}
+
+			err := client.UploadProfile(testProfile)
+
+			if tt.wantError && err == nil {
+				t.Error("expected error, got nil")
+			}
+			if !tt.wantError && err != nil {
+				t.Errorf("expected no error, got %v", err)
+			}
+		})
+	}
+}
+
+func TestListProfiles(t *testing.T) {
+	tests := []struct {
+		name         string
+		statusCode   int
+		responseBody interface{}
+		wantError    bool
+		wantProfiles []string
+	}{
+		{
+			name:         "successful list",
+			statusCode:   http.StatusOK,
+			responseBody: []string{"profile1", "profile2"},
+			wantError:    false,
+			wantProfiles: []string{"profile1", "profile2"},
+		},
+		{
+			name:         "empty list",
+			statusCode:   http.StatusOK,
+			responseBody: []string{},
+			wantError:    false,
+			wantProfiles: []string{},
+		},
+		{
+			name:         "server error",
+			statusCode:   http.StatusInternalServerError,
+			responseBody: map[string]string{"error": "internal error"},
+			wantError:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/api/v1/profiles" {
+					t.Errorf("expected path /api/v1/profiles, got %s", r.URL.Path)
+				}
+				if r.Method != http.MethodGet {
+					t.Errorf("expected method GET, got %s", r.Method)
+				}
+
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tt.statusCode)
+				if err := json.NewEncoder(w).Encode(tt.responseBody); err != nil {
+					t.Fatalf("failed to encode response: %v", err)
+				}
+			}))
+			defer server.Close()
+
+			client := NewClient(server.URL)
+			profiles, err := client.ListProfiles()
+
+			if tt.wantError && err == nil {
+				t.Error("expected error, got nil")
+			}
+			if !tt.wantError && err != nil {
+				t.Errorf("expected no error, got %v", err)
+			}
+
+			if !tt.wantError {
+				if len(profiles) != len(tt.wantProfiles) {
+					t.Errorf("expected %d profiles, got %d", len(tt.wantProfiles), len(profiles))
+				}
+				for i, name := range tt.wantProfiles {
+					if profiles[i] != name {
+						t.Errorf("expected profile %s at index %d, got %s", name, i, profiles[i])
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestDownloadProfile(t *testing.T) {
+	tests := []struct {
+		name         string
+		profileName  string
+		statusCode   int
+		responseBody interface{}
+		wantError    bool
+		errorContains string
+	}{
+		{
+			name:        "successful download",
+			profileName: "test",
+			statusCode:  http.StatusOK,
+			responseBody: Profile{
+				Name:       "test",
+				Extensions: []Extension{{ID: "ext1", Version: "1.0.0", Enabled: true}},
+			},
+			wantError: false,
+		},
+		{
+			name:          "profile not found",
+			profileName:   "nonexistent",
+			statusCode:    http.StatusNotFound,
+			responseBody:  map[string]string{"error": "not found"},
+			wantError:     true,
+			errorContains: "not found",
+		},
+		{
+			name:         "server error",
+			profileName:  "test",
+			statusCode:   http.StatusInternalServerError,
+			responseBody: map[string]string{"error": "internal error"},
+			wantError:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				expectedPath := "/api/v1/profiles/" + tt.profileName
+				if r.URL.Path != expectedPath {
+					t.Errorf("expected path %s, got %s", expectedPath, r.URL.Path)
+				}
+				if r.Method != http.MethodGet {
+					t.Errorf("expected method GET, got %s", r.Method)
+				}
+
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tt.statusCode)
+				if err := json.NewEncoder(w).Encode(tt.responseBody); err != nil {
+					t.Fatalf("failed to encode response: %v", err)
+				}
+			}))
+			defer server.Close()
+
+			client := NewClient(server.URL)
+			profile, err := client.DownloadProfile(tt.profileName)
+
+			if tt.wantError && err == nil {
+				t.Error("expected error, got nil")
+			}
+			if !tt.wantError && err != nil {
+				t.Errorf("expected no error, got %v", err)
+			}
+
+			if tt.wantError && tt.errorContains != "" {
+				if !strings.Contains(err.Error(), tt.errorContains) {
+					t.Errorf("expected error to contain '%s', got: %s", tt.errorContains, err.Error())
+				}
+			}
+
+			if !tt.wantError {
+				if profile.Name != tt.profileName {
+					t.Errorf("expected profile name %s, got %s", tt.profileName, profile.Name)
+				}
+			}
+		})
+	}
+}

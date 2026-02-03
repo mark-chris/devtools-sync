@@ -1,31 +1,24 @@
 package main
 
 import (
-	"flag"
 	"fmt"
-	"log"
 	"os"
 
-	"github.com/mark-chris/devtools-sync/agent/internal/config"
+	"github.com/spf13/cobra"
 )
 
 const version = "0.1.0"
 
+var rootCmd = &cobra.Command{
+	Use:   "devtools-sync",
+	Short: "DevTools Sync Agent - Synchronize your development tools",
+	Long: `DevTools Sync Agent helps you manage and synchronize your development tool extensions
+and configurations across multiple machines.`,
+}
+
 func main() {
-	versionFlag := flag.Bool("version", false, "Print version information")
-	flag.Parse()
-
-	if *versionFlag {
-		fmt.Printf("devtools-sync-agent version %s\n", version)
-		os.Exit(0)
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
-
-	cfg, err := config.Load()
-	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
-	}
-
-	log.Printf("devtools-sync-agent starting (version %s)", version)
-	log.Printf("Server URL: %s", cfg.ServerURL)
-	log.Println("Agent initialized successfully")
 }
