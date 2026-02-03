@@ -56,3 +56,122 @@ See `docs/plans/2026-01-30-authentication-design.md` for comprehensive security 
 - Rate limiting
 - Audit logging
 - Role-based access control
+
+## JWT Secret Management
+
+### Generating a Strong JWT Secret
+
+The JWT secret must be at least 32 characters and cryptographically random. Use one of these methods:
+
+**Option 1: OpenSSL (recommended)**
+```bash
+openssl rand -base64 48
+```
+
+**Option 2: /dev/urandom**
+```bash
+head -c 32 /dev/urandom | base64
+```
+
+**Option 3: Go**
+```go
+package main
+import (
+    "crypto/rand"
+    "encoding/base64"
+    "fmt"
+)
+func main() {
+    b := make([]byte, 32)
+    rand.Read(b)
+    fmt.Println(base64.StdEncoding.EncodeToString(b))
+}
+```
+
+### Setting the JWT Secret
+
+**Development:**
+```bash
+# Default secret is allowed in development mode
+export ENVIRONMENT=development
+export JWT_SECRET=local-dev-jwt-secret-not-for-production
+```
+
+**Production:**
+```bash
+# Generate and set a strong secret
+export JWT_SECRET=$(openssl rand -base64 48)
+```
+
+**Docker/Kubernetes:**
+```yaml
+# Use secrets management
+apiVersion: v1
+kind: Secret
+metadata:
+  name: devtools-sync-secrets
+type: Opaque
+data:
+  jwt-secret: <base64-encoded-secret>
+```
+
+### Secret Validation
+
+The server validates the JWT secret on startup:
+
+- ✅ **Minimum length:** 32 characters
+- ✅ **Not a weak default:** Checks against known weak values
+- ✅ **Environment-aware:** Dev mode allows defaults with warning
+- ❌ **Production:** Server refuses to start with weak/default secrets
+
+### Secret Rotation Procedure
+
+JWT secret rotation requires a dual-key validation period to avoid downtime:
+
+**Step 1: Prepare new secret**
+```bash
+# Generate new secret
+NEW_SECRET=$(openssl rand -base64 48)
+```
+
+**Step 2: Add new secret to environment** (implementation pending - see #57)
+```bash
+# Future: Support dual-key validation
+export JWT_SECRET=$OLD_SECRET
+export JWT_SECRET_NEW=$NEW_SECRET
+```
+
+**Step 3: Deploy with dual validation**
+- Server validates tokens signed with either old or new secret
+- Wait for all old tokens to expire (15 minutes for access tokens)
+
+**Step 4: Complete rotation**
+```bash
+# Switch to new secret only
+export JWT_SECRET=$NEW_SECRET
+unset JWT_SECRET_NEW
+```
+
+**Step 5: Revoke old tokens**
+- Optionally revoke all refresh tokens to force re-authentication
+- Update secret in secrets management system
+
+### When to Rotate Secrets
+
+Rotate JWT secrets when:
+- **Suspected compromise:** Immediately
+- **Employee departure:** Within 24 hours if they had access
+- **Regular schedule:** Every 90 days (best practice)
+- **After security incident:** As part of incident response
+- **Compliance requirement:** As mandated by policy
+
+### Emergency Rotation
+
+In case of suspected secret compromise:
+
+1. **Generate new secret immediately**
+2. **Deploy with new secret** (downtime acceptable in emergency)
+3. **Revoke all refresh tokens** from database
+4. **Force all users to re-authenticate**
+5. **Investigate scope of compromise**
+6. **Update monitoring alerts**
