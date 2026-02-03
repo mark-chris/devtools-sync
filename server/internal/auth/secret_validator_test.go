@@ -130,9 +130,11 @@ func TestIsDevelopmentMode_Development(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Save and restore original value
 			original := os.Getenv(tt.env)
-			defer os.Setenv(tt.env, original)
+			defer func() {
+				_ = os.Setenv(tt.env, original)
+			}()
 
-			os.Setenv(tt.env, tt.value)
+			_ = os.Setenv(tt.env, tt.value)
 
 			if !IsDevelopmentMode() {
 				t.Errorf("IsDevelopmentMode() = false, want true for %s=%s", tt.env, tt.value)
@@ -146,8 +148,8 @@ func TestIsDevelopmentMode_Production(t *testing.T) {
 	origEnv := os.Getenv("ENVIRONMENT")
 	origGoEnv := os.Getenv("GO_ENV")
 	defer func() {
-		os.Setenv("ENVIRONMENT", origEnv)
-		os.Setenv("GO_ENV", origGoEnv)
+		_ = os.Setenv("ENVIRONMENT", origEnv)
+		_ = os.Setenv("GO_ENV", origGoEnv)
 	}()
 
 	tests := []struct {
@@ -164,8 +166,8 @@ func TestIsDevelopmentMode_Production(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			os.Setenv("ENVIRONMENT", tt.environment)
-			os.Setenv("GO_ENV", tt.goEnv)
+			_ = os.Setenv("ENVIRONMENT", tt.environment)
+			_ = os.Setenv("GO_ENV", tt.goEnv)
 
 			if IsDevelopmentMode() {
 				t.Errorf("IsDevelopmentMode() = true, want false for non-dev environment")
@@ -179,13 +181,13 @@ func TestIsDevelopmentMode_DefaultsToProduction(t *testing.T) {
 	origEnv := os.Getenv("ENVIRONMENT")
 	origGoEnv := os.Getenv("GO_ENV")
 	defer func() {
-		os.Setenv("ENVIRONMENT", origEnv)
-		os.Setenv("GO_ENV", origGoEnv)
+		_ = os.Setenv("ENVIRONMENT", origEnv)
+		_ = os.Setenv("GO_ENV", origGoEnv)
 	}()
 
 	// Clear both variables
-	os.Unsetenv("ENVIRONMENT")
-	os.Unsetenv("GO_ENV")
+	_ = os.Unsetenv("ENVIRONMENT")
+	_ = os.Unsetenv("GO_ENV")
 
 	if IsDevelopmentMode() {
 		t.Error("IsDevelopmentMode() = true, want false (should default to production)")
