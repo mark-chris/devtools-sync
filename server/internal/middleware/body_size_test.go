@@ -16,7 +16,7 @@ func TestMaxBodySize_WithinLimit(t *testing.T) {
 			t.Fatalf("Failed to read body: %v", err)
 		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("Read " + string(len(body)) + " bytes"))
+		_, _ = w.Write([]byte("Read " + string(len(body)) + " bytes"))
 	})
 
 	// Wrap with MaxBodySize middleware (1KB limit)
@@ -45,7 +45,7 @@ func TestMaxBodySize_ExceedsLimit(t *testing.T) {
 			// Error reading body - return 413
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusRequestEntityTooLarge)
-			w.Write([]byte(`{"error":"Request body too large"}`))
+			_, _ = w.Write([]byte(`{"error":"Request body too large"}`))
 			return
 		}
 		w.WriteHeader(http.StatusOK)
@@ -77,7 +77,7 @@ func TestMaxBodySize_ExactLimit(t *testing.T) {
 			t.Fatalf("Failed to read body: %v", err)
 		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("Read " + string(len(body)) + " bytes"))
+		_, _ = w.Write([]byte("Read " + string(len(body)) + " bytes"))
 	})
 
 	// Wrap with MaxBodySize middleware (1KB limit)
