@@ -26,12 +26,8 @@ func ValidateSecret(secret string, isDev bool) error {
 		return errors.New("JWT_SECRET environment variable is required")
 	}
 
-	// Check minimum length
-	if len(secret) < 32 {
-		return fmt.Errorf("JWT secret must be at least 32 characters (got %d)", len(secret))
-	}
-
-	// Check against known weak secrets
+	// Check against known weak secrets FIRST (before length check)
+	// This allows dev mode to accept them with a warning
 	for _, weak := range knownWeakSecrets {
 		if secret == weak {
 			if isDev {
@@ -40,6 +36,11 @@ func ValidateSecret(secret string, isDev bool) error {
 			}
 			return fmt.Errorf("default/weak JWT secret not allowed in production environment")
 		}
+	}
+
+	// Check minimum length (for non-weak secrets)
+	if len(secret) < 32 {
+		return fmt.Errorf("JWT secret must be at least 32 characters (got %d)", len(secret))
 	}
 
 	return nil
