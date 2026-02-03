@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 )
 
@@ -16,7 +17,7 @@ func TestMaxBodySize_WithinLimit(t *testing.T) {
 			t.Fatalf("Failed to read body: %v", err)
 		}
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("Read " + string(len(body)) + " bytes"))
+		_, _ = w.Write([]byte("Read " + strconv.Itoa(len(body)) + " bytes"))
 	})
 
 	// Wrap with MaxBodySize middleware (1KB limit)
@@ -77,7 +78,7 @@ func TestMaxBodySize_ExactLimit(t *testing.T) {
 			t.Fatalf("Failed to read body: %v", err)
 		}
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("Read " + string(len(body)) + " bytes"))
+		_, _ = w.Write([]byte("Read " + strconv.Itoa(len(body)) + " bytes"))
 	})
 
 	// Wrap with MaxBodySize middleware (1KB limit)
