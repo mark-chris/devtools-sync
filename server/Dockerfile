@@ -1,5 +1,6 @@
 # Production Dockerfile for server
 # Multi-stage build for minimal, secure final image
+# Updated: 2026-02-03 - Rebuild with golang.org/x/crypto v0.47.0 security fixes
 
 # Build stage
 FROM golang:1.24-alpine AS builder
