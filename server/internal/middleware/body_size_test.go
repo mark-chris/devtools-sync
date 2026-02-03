@@ -154,15 +154,18 @@ func TestMaxBodySize_GETRequest(t *testing.T) {
 
 func TestHandleMaxBytesError_WithMaxBytesError(t *testing.T) {
 	w := httptest.NewRecorder()
-	err := strings.NewReader("").Read(nil) // Create an error
 	// Create the specific error message that MaxBytesReader returns
-	err = &struct{ error }{error: &maxBytesError{}}
+	err := &maxBytesError{}
 
 	handled := HandleMaxBytesError(w, err, 1024)
 
-	// Note: This test demonstrates the function, but the actual error detection
-	// may need adjustment based on how http.MaxBytesReader returns errors
-	_ = handled // Function exists for future use
+	if !handled {
+		t.Error("HandleMaxBytesError() should have handled max bytes error")
+	}
+
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Errorf("Expected status 413, got %d", w.Code)
+	}
 }
 
 // maxBytesError simulates the error from MaxBytesReader
