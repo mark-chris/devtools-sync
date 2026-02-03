@@ -1,6 +1,7 @@
 package vscode
 
 import (
+	"os/exec"
 	"testing"
 )
 
@@ -14,46 +15,30 @@ func TestDetectInstallation(t *testing.T) {
 }
 
 func TestListExtensions(t *testing.T) {
+	// Check if VS Code CLI is available
+	if !isVSCodeInstalled() {
+		t.Skip("VS Code CLI not available, skipping test")
+	}
+
 	extensions, err := ListExtensions()
 	if err != nil {
 		t.Errorf("ListExtensions should not error, got: %v", err)
 	}
 
-	// Stub implementation returns empty list
 	if extensions == nil {
 		t.Error("expected extensions slice, got nil")
 	}
 }
 
 func TestInstallExtension(t *testing.T) {
-	tests := []struct {
-		name        string
-		extensionID string
-		wantError   bool
-	}{
-		{
-			name:        "valid extension ID",
-			extensionID: "ms-vscode.go",
-			wantError:   false,
-		},
-		{
-			name:        "empty extension ID",
-			extensionID: "",
-			wantError:   true,
-		},
+	// Only test the validation error case
+	// Don't actually try to install extensions in tests
+	err := InstallExtension("")
+	if err == nil {
+		t.Error("expected error for empty extension ID, got nil")
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := InstallExtension(tt.extensionID)
-
-			if tt.wantError && err == nil {
-				t.Error("expected error, got nil")
-			}
-			if !tt.wantError && err != nil {
-				t.Errorf("expected no error, got %v", err)
-			}
-		})
+	if err.Error() != "extension ID cannot be empty" {
+		t.Errorf("expected 'extension ID cannot be empty' error, got: %s", err.Error())
 	}
 }
 
@@ -64,4 +49,10 @@ func TestGetVSCodePaths(t *testing.T) {
 	if len(paths) == 0 {
 		t.Error("expected at least one VS Code path")
 	}
+}
+
+// Helper function to check if VS Code CLI is available
+func isVSCodeInstalled() bool {
+	_, err := exec.LookPath("code")
+	return err == nil
 }
