@@ -176,24 +176,12 @@ func (e *maxBytesError) Error() string {
 }
 
 func TestMaxBodySize_MultipleReads(t *testing.T) {
-	// Create a handler that reads the body multiple times
+	// Create a handler that reads the body completely
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// First read
-		chunk1 := make([]byte, 512)
-		n1, err1 := r.Body.Read(chunk1)
-		if err1 != nil && err1 != io.EOF {
-			t.Logf("First read error: %v", err1)
-		}
-
-		// Second read
-		chunk2 := make([]byte, 512)
-		n2, err2 := r.Body.Read(chunk2)
-		if err2 != nil && err2 != io.EOF {
-			t.Logf("Second read error: %v", err2)
-		}
-
-		total := n1 + n2
-		if total > 1024 {
+		// Try to read the entire body
+		_, err := io.ReadAll(r.Body)
+		if err != nil {
+			// MaxBytesReader returns an error when limit is exceeded
 			w.WriteHeader(http.StatusRequestEntityTooLarge)
 			return
 		}
