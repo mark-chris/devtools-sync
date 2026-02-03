@@ -175,3 +175,201 @@ In case of suspected secret compromise:
 4. **Force all users to re-authenticate**
 5. **Investigate scope of compromise**
 6. **Update monitoring alerts**
+
+## Database SSL/TLS Configuration
+
+### Overview
+
+The server enforces encrypted database connections in production to protect sensitive data in transit. This prevents credentials, user data, and password hashes from being exposed to network sniffing.
+
+### SSL Modes
+
+PostgreSQL supports several SSL modes with different security guarantees:
+
+| Mode | Encryption | Server Auth | Hostname Check | Production Use |
+|------|-----------|-------------|----------------|----------------|
+| `disable` | ❌ None | ❌ No | ❌ No | ❌ **Never** |
+| `allow` | ⚠️ Maybe | ❌ No | ❌ No | ❌ **Never** |
+| `prefer` | ⚠️ Maybe | ❌ No | ❌ No | ❌ **Never** |
+| `require` | ✅ Yes | ❌ No | ❌ No | ⚠️ **Minimum** |
+| `verify-ca` | ✅ Yes | ✅ Yes | ❌ No | ✅ **Good** |
+| `verify-full` | ✅ Yes | ✅ Yes | ✅ Yes | ✅ **Best** |
+
+### Production Requirements
+
+In production mode, the server **only allows** these SSL modes:
+- `sslmode=require` - Minimum acceptable (encrypts traffic but doesn't verify server identity)
+- `sslmode=verify-ca` - Recommended (verifies server certificate is signed by trusted CA)
+- `sslmode=verify-full` - Best practice (verifies CA and hostname match)
+
+The server will **refuse to start** with:
+- `sslmode=disable`
+- `sslmode=allow`
+- `sslmode=prefer`
+- Missing `sslmode` parameter
+
+### Development Mode
+
+Development mode (`ENVIRONMENT=development` or `ENVIRONMENT=dev`) allows any SSL mode including `disable` for local testing convenience.
+
+### Configuration Examples
+
+**Local Development:**
+```bash
+# Minimal configuration for local PostgreSQL
+export ENVIRONMENT=development
+export DATABASE_URL='postgres://devtools:password@localhost:5432/devtools_sync?sslmode=disable'
+```
+
+**Production (Basic SSL):**
+```bash
+export ENVIRONMENT=production
+export DATABASE_URL='postgres://user:password@db.example.com:5432/devtools_sync?sslmode=require'
+```
+
+**Production (Verified SSL - Recommended):**
+```bash
+export ENVIRONMENT=production
+export DATABASE_URL='postgres://user:password@db.example.com:5432/devtools_sync?sslmode=verify-full&sslrootcert=/etc/ssl/certs/ca-bundle.crt'
+```
+
+### Cloud Provider SSL Setup
+
+**AWS RDS:**
+```bash
+# RDS provides SSL certificates, use verify-full for best security
+export DATABASE_URL='postgres://user:password@mydb.abc123.us-east-1.rds.amazonaws.com:5432/devtools_sync?sslmode=verify-full&sslrootcert=/path/to/rds-ca-bundle.crt'
+
+# Download RDS CA bundle
+wget https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem -O rds-ca-bundle.crt
+```
+
+**Google Cloud SQL:**
+```bash
+# Cloud SQL with SSL/TLS
+export DATABASE_URL='postgres://user:password@10.1.2.3:5432/devtools_sync?sslmode=verify-ca&sslrootcert=/path/to/server-ca.pem&sslcert=/path/to/client-cert.pem&sslkey=/path/to/client-key.pem'
+
+# Download Cloud SQL certificates via gcloud
+gcloud sql ssl-certs create client-cert --instance=INSTANCE_NAME
+gcloud sql ssl-certs describe client-cert --instance=INSTANCE_NAME
+```
+
+**Azure Database for PostgreSQL:**
+```bash
+# Azure with SSL verification
+export DATABASE_URL='postgres://user@servername:password@servername.postgres.database.azure.com:5432/devtools_sync?sslmode=verify-full&sslrootcert=/path/to/BaltimoreCyberTrustRoot.crt.pem'
+
+# Download Azure root certificate
+wget https://www.digicert.com/CACerts/BaltimoreCyberTrustRoot.crt.pem
+```
+
+**Heroku Postgres:**
+```bash
+# Heroku provides SSL automatically
+export DATABASE_URL='postgres://user:password@ec2-1-2-3-4.compute-1.amazonaws.com:5432/dbname?sslmode=require'
+```
+
+### Docker Compose Production
+
+Update `docker-compose.yml` for production:
+
+```yaml
+services:
+  postgres:
+    image: postgres:16-alpine
+    command:
+      - "postgres"
+      - "-c"
+      - "ssl=on"
+      - "-c"
+      - "ssl_cert_file=/etc/ssl/certs/server.crt"
+      - "-c"
+      - "ssl_key_file=/etc/ssl/private/server.key"
+    volumes:
+      - ./certs:/etc/ssl/certs
+      - ./keys:/etc/ssl/private
+    environment:
+      POSTGRES_USER: devtools
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: devtools_sync
+
+  server:
+    environment:
+      ENVIRONMENT: production
+      DATABASE_URL: postgres://devtools:${POSTGRES_PASSWORD}@postgres:5432/devtools_sync?sslmode=verify-full&sslrootcert=/etc/ssl/certs/ca.crt
+    volumes:
+      - ./certs/ca.crt:/etc/ssl/certs/ca.crt:ro
+```
+
+### Generating Self-Signed Certificates (Development/Testing)
+
+For testing SSL in non-production environments:
+
+```bash
+# Generate CA private key
+openssl genrsa -out ca-key.pem 4096
+
+# Generate CA certificate
+openssl req -new -x509 -days 365 -key ca-key.pem -out ca.pem \
+  -subj "/CN=DevTools Sync CA"
+
+# Generate server private key
+openssl genrsa -out server-key.pem 4096
+
+# Generate server certificate signing request
+openssl req -new -key server-key.pem -out server.csr \
+  -subj "/CN=postgres"
+
+# Sign server certificate with CA
+openssl x509 -req -days 365 -in server.csr -CA ca.pem -CAkey ca-key.pem \
+  -CAcreateserial -out server.pem
+
+# Set permissions
+chmod 600 server-key.pem ca-key.pem
+chmod 644 server.pem ca.pem
+```
+
+### Validation
+
+The server validates the database URL on startup:
+
+- ✅ **SSL Mode Check:** Verifies `sslmode` parameter value
+- ✅ **Production Enforcement:** Rejects weak SSL modes in production
+- ✅ **Clear Error Messages:** Provides actionable guidance on configuration errors
+- ✅ **Development Flexibility:** Allows any mode in development for local testing
+
+### Troubleshooting
+
+**Error: "database SSL required in production"**
+```bash
+# Check your DATABASE_URL
+echo $DATABASE_URL
+
+# Ensure it includes sslmode=require (minimum) or verify-full (recommended)
+export DATABASE_URL='postgres://user:pass@host:5432/db?sslmode=verify-full'
+```
+
+**Error: "certificate verify failed"**
+```bash
+# Ensure CA certificate path is correct
+export DATABASE_URL='postgres://user:pass@host:5432/db?sslmode=verify-full&sslrootcert=/correct/path/to/ca.crt'
+
+# Verify certificate file exists and is readable
+ls -la /correct/path/to/ca.crt
+```
+
+**Error: "server certificate for 'hostname' does not match"**
+```bash
+# Use verify-ca instead of verify-full if hostname doesn't match certificate
+export DATABASE_URL='postgres://user:pass@host:5432/db?sslmode=verify-ca&sslrootcert=/path/to/ca.crt'
+```
+
+### Security Best Practices
+
+1. **Use verify-full in production** when possible for maximum security
+2. **Rotate certificates** before expiration (set alerts for 30 days before)
+3. **Store certificates securely** - use secrets management (AWS Secrets Manager, HashiCorp Vault, etc.)
+4. **Use strong cipher suites** - PostgreSQL 12+ defaults are secure
+5. **Monitor SSL connections** - log and alert on unencrypted connection attempts
+6. **Document certificate locations** in deployment runbooks
+7. **Test SSL configuration** in staging before production deployment

@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/mark-chris/devtools-sync/server/internal/auth"
+	"github.com/mark-chris/devtools-sync/server/internal/database"
 	"github.com/mark-chris/devtools-sync/server/internal/middleware"
 )
 
@@ -24,6 +25,12 @@ func main() {
 
 	if err := auth.ValidateSecret(jwtSecret, isDev); err != nil {
 		log.Fatalf("JWT secret validation failed: %v", err)
+	}
+
+	// Validate database URL SSL configuration
+	dbURL := os.Getenv("DATABASE_URL")
+	if err := database.ValidateDatabaseURL(dbURL, isDev); err != nil {
+		log.Fatalf("Database URL validation failed: %v", err)
 	}
 
 	// Parse max body size configuration
