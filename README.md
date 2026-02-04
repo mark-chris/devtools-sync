@@ -98,6 +98,9 @@ devtools-sync profile save work-setup
 # List all profiles
 devtools-sync profile list
 
+# Compare a profile with currently installed extensions
+devtools-sync profile diff work-setup
+
 # Load a profile
 devtools-sync profile load work-setup
 
@@ -106,6 +109,31 @@ devtools-sync profile show work-setup
 
 # Delete a profile
 devtools-sync profile delete old-setup
+```
+
+#### Profile Features
+
+- **Validation**: Profiles are validated to ensure extension IDs follow the correct format (publisher.name)
+- **Conflict Detection**: Automatically detects which extensions are already installed vs. need to be installed
+- **Diff Command**: Preview what would change before loading a profile
+- **Idempotent Loading**: Loading a profile multiple times won't reinstall already installed extensions
+- **Save-Diff-Load Workflow**: Compare profiles before applying them to avoid unexpected changes
+
+#### Example Workflow
+
+```bash
+# Save your current setup
+devtools-sync profile save my-setup
+
+# On another machine, check what would be installed
+devtools-sync profile diff my-setup
+# Output shows:
+#   To Install (5): new extensions that will be installed
+#   Already Installed (3): extensions you already have
+
+# Load the profile (only installs missing extensions)
+devtools-sync profile load my-setup
+# Skips already installed extensions automatically
 ```
 
 ### Synchronization
