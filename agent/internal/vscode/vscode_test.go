@@ -445,6 +445,115 @@ func TestCompareVersions(t *testing.T) {
 	}
 }
 
+func TestMergeExtensions(t *testing.T) {
+	tests := []struct {
+		name string
+		sets [][]Extension
+		want []Extension
+	}{
+		{
+			name: "no duplicates",
+			sets: [][]Extension{
+				{
+					{ID: "ms-python.python", Version: "2024.0.0", Enabled: true},
+					{ID: "golang.go", Version: "0.40.0", Enabled: true},
+				},
+				{
+					{ID: "ms-vscode.cpptools", Version: "1.15.0", Enabled: true},
+				},
+			},
+			want: []Extension{
+				{ID: "golang.go", Version: "0.40.0", Enabled: true},
+				{ID: "ms-python.python", Version: "2024.0.0", Enabled: true},
+				{ID: "ms-vscode.cpptools", Version: "1.15.0", Enabled: true},
+			},
+		},
+		{
+			name: "duplicates with newer version",
+			sets: [][]Extension{
+				{
+					{ID: "ms-python.python", Version: "2024.0.0", Enabled: true},
+				},
+				{
+					{ID: "ms-python.python", Version: "2024.1.0", Enabled: true},
+				},
+			},
+			want: []Extension{
+				{ID: "ms-python.python", Version: "2024.1.0", Enabled: true},
+			},
+		},
+		{
+			name: "stable over older insider",
+			sets: [][]Extension{
+				{
+					{ID: "golang.go", Version: "0.40.0", Enabled: true},
+				},
+				{
+					{ID: "golang.go", Version: "0.39.0", Enabled: true},
+				},
+			},
+			want: []Extension{
+				{ID: "golang.go", Version: "0.40.0", Enabled: true},
+			},
+		},
+		{
+			name: "multiple duplicates",
+			sets: [][]Extension{
+				{
+					{ID: "ms-python.python", Version: "2024.0.0", Enabled: true},
+					{ID: "golang.go", Version: "0.39.0", Enabled: true},
+				},
+				{
+					{ID: "ms-python.python", Version: "2024.1.0", Enabled: true},
+					{ID: "ms-vscode.cpptools", Version: "1.15.0", Enabled: true},
+				},
+				{
+					{ID: "golang.go", Version: "0.40.0", Enabled: true},
+					{ID: "ms-python.python", Version: "2023.0.0", Enabled: true},
+				},
+			},
+			want: []Extension{
+				{ID: "golang.go", Version: "0.40.0", Enabled: true},
+				{ID: "ms-python.python", Version: "2024.1.0", Enabled: true},
+				{ID: "ms-vscode.cpptools", Version: "1.15.0", Enabled: true},
+			},
+		},
+		{
+			name: "empty sets",
+			sets: [][]Extension{
+				{},
+				{},
+			},
+			want: []Extension{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := mergeExtensions(tt.sets...)
+
+			if len(got) != len(tt.want) {
+				t.Errorf("mergeExtensions() returned %d extensions, want %d", len(got), len(tt.want))
+			}
+
+			for i := range got {
+				if i >= len(tt.want) {
+					break
+				}
+				if got[i].ID != tt.want[i].ID {
+					t.Errorf("extension[%d].ID = %v, want %v", i, got[i].ID, tt.want[i].ID)
+				}
+				if got[i].Version != tt.want[i].Version {
+					t.Errorf("extension[%d].Version = %v, want %v", i, got[i].Version, tt.want[i].Version)
+				}
+				if got[i].Enabled != tt.want[i].Enabled {
+					t.Errorf("extension[%d].Enabled = %v, want %v", i, got[i].Enabled, tt.want[i].Enabled)
+				}
+			}
+		})
+	}
+}
+
 // Helper function to check if VS Code CLI is available
 func isVSCodeInstalled() bool {
 	_, err := exec.LookPath("code")

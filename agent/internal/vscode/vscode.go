@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 
 	"golang.org/x/mod/semver"
@@ -244,4 +245,44 @@ func scanExtensionDir(dir string) ([]Extension, error) {
 	}
 
 	return extensions, nil
+}
+
+// mergeExtensions combines multiple sets of extensions, deduplicates by ID,
+// and keeps the highest version for each extension.
+func mergeExtensions(sets ...[]Extension) []Extension {
+	// Use map for deduplication
+	extMap := make(map[string]Extension)
+
+	for _, set := range sets {
+		for _, ext := range set {
+			if existing, found := extMap[ext.ID]; found {
+				// Extension already exists, compare versions
+				cmp := compareVersions(ext.Version, existing.Version)
+				if cmp > 0 {
+					// New version is higher
+					log.Printf("Deduplicating %s: keeping v%s over v%s", ext.ID, ext.Version, existing.Version)
+					extMap[ext.ID] = ext
+				} else if cmp < 0 {
+					// Existing version is higher
+					log.Printf("Deduplicating %s: keeping v%s over v%s", ext.ID, existing.Version, ext.Version)
+				}
+				// If equal (cmp == 0), keep existing
+			} else {
+				extMap[ext.ID] = ext
+			}
+		}
+	}
+
+	// Convert map to slice
+	result := make([]Extension, 0, len(extMap))
+	for _, ext := range extMap {
+		result = append(result, ext)
+	}
+
+	// Sort by ID for consistent output
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].ID < result[j].ID
+	})
+
+	return result
 }
