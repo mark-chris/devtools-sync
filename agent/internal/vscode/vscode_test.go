@@ -554,6 +554,169 @@ func TestMergeExtensions(t *testing.T) {
 	}
 }
 
+func TestListExtensionsFromDirs(t *testing.T) {
+	// Create temporary test directories
+	tmpDir1 := t.TempDir()
+	tmpDir2 := t.TempDir()
+
+	// Setup first directory (stable) with Python extension
+	ext1Dir := filepath.Join(tmpDir1, "ms-python.python-2024.0.0")
+	err := os.MkdirAll(ext1Dir, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest1 := `{
+		"name": "python",
+		"displayName": "Python",
+		"description": "Python extension",
+		"version": "2024.0.0",
+		"publisher": "ms-python"
+	}`
+	err = os.WriteFile(filepath.Join(ext1Dir, "package.json"), []byte(manifest1), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Add Go extension to first directory
+	ext2Dir := filepath.Join(tmpDir1, "golang.go-0.40.0")
+	err = os.MkdirAll(ext2Dir, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest2 := `{
+		"name": "go",
+		"version": "0.40.0",
+		"publisher": "golang"
+	}`
+	err = os.WriteFile(filepath.Join(ext2Dir, "package.json"), []byte(manifest2), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Setup second directory (insiders) with duplicate Python extension (newer version)
+	ext3Dir := filepath.Join(tmpDir2, "ms-python.python-2024.1.0")
+	err = os.MkdirAll(ext3Dir, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest3 := `{
+		"name": "python",
+		"displayName": "Python",
+		"description": "Python extension",
+		"version": "2024.1.0",
+		"publisher": "ms-python"
+	}`
+	err = os.WriteFile(filepath.Join(ext3Dir, "package.json"), []byte(manifest3), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Add C++ extension to second directory
+	ext4Dir := filepath.Join(tmpDir2, "ms-vscode.cpptools-1.15.0")
+	err = os.MkdirAll(ext4Dir, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest4 := `{
+		"name": "cpptools",
+		"version": "1.15.0",
+		"publisher": "ms-vscode"
+	}`
+	err = os.WriteFile(filepath.Join(ext4Dir, "package.json"), []byte(manifest4), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Test with both directories
+	dirs := []string{tmpDir1, tmpDir2}
+	extensions, err := listExtensionsFromDirs(dirs)
+	if err != nil {
+		t.Fatalf("listExtensionsFromDirs failed: %v", err)
+	}
+
+	// Should find 3 unique extensions (Python merged to higher version)
+	if len(extensions) != 3 {
+		t.Errorf("expected 3 extensions, got %d", len(extensions))
+	}
+
+	// Verify extensions and versions
+	extMap := make(map[string]string)
+	for _, ext := range extensions {
+		extMap[ext.ID] = ext.Version
+	}
+
+	// Check Python extension has the higher version
+	if version, found := extMap["ms-python.python"]; !found {
+		t.Error("Python extension not found")
+	} else if version != "2024.1.0" {
+		t.Errorf("expected Python version 2024.1.0, got %s", version)
+	}
+
+	// Check Go extension
+	if version, found := extMap["golang.go"]; !found {
+		t.Error("Go extension not found")
+	} else if version != "0.40.0" {
+		t.Errorf("expected Go version 0.40.0, got %s", version)
+	}
+
+	// Check C++ extension
+	if version, found := extMap["ms-vscode.cpptools"]; !found {
+		t.Error("C++ extension not found")
+	} else if version != "1.15.0" {
+		t.Errorf("expected C++ version 1.15.0, got %s", version)
+	}
+}
+
+func TestListExtensionsFromDirsWithErrors(t *testing.T) {
+	// Create one valid directory and one nonexistent
+	tmpDir := t.TempDir()
+
+	// Add valid extension
+	extDir := filepath.Join(tmpDir, "golang.go-0.40.0")
+	err := os.MkdirAll(extDir, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{
+		"name": "go",
+		"version": "0.40.0",
+		"publisher": "golang"
+	}`
+	err = os.WriteFile(filepath.Join(extDir, "package.json"), []byte(manifest), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Test with valid and nonexistent directories
+	dirs := []string{tmpDir, "/nonexistent/directory"}
+	extensions, err := listExtensionsFromDirs(dirs)
+
+	// Should not error (continues on directory errors)
+	if err != nil {
+		t.Errorf("expected no error, got: %v", err)
+	}
+
+	// Should still find the valid extension
+	if len(extensions) != 1 {
+		t.Errorf("expected 1 extension, got %d", len(extensions))
+	}
+
+	if len(extensions) > 0 && extensions[0].ID != "golang.go" {
+		t.Errorf("expected golang.go, got %s", extensions[0].ID)
+	}
+}
+
+func TestListExtensionsFromDirsEmpty(t *testing.T) {
+	// Test with empty slice
+	extensions, err := listExtensionsFromDirs([]string{})
+	if err != nil {
+		t.Errorf("expected no error, got: %v", err)
+	}
+	if len(extensions) != 0 {
+		t.Errorf("expected 0 extensions, got %d", len(extensions))
+	}
+}
+
 // Helper function to check if VS Code CLI is available
 func isVSCodeInstalled() bool {
 	_, err := exec.LookPath("code")

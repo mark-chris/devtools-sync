@@ -286,3 +286,26 @@ func mergeExtensions(sets ...[]Extension) []Extension {
 
 	return result
 }
+
+// listExtensionsFromDirs scans multiple directories for installed extensions
+// and merges the results, keeping the highest version of each extension.
+// Continues on errors with log.Printf warnings.
+func listExtensionsFromDirs(dirs []string) ([]Extension, error) {
+	sets := make([][]Extension, 0, len(dirs))
+
+	for _, dir := range dirs {
+		extensions, err := scanExtensionDir(dir)
+		if err != nil {
+			// Log warning but continue scanning other directories
+			log.Printf("Warning: failed to scan directory %s: %v", dir, err)
+			continue
+		}
+		if len(extensions) > 0 {
+			sets = append(sets, extensions)
+		}
+	}
+
+	// Merge all extension sets
+	merged := mergeExtensions(sets...)
+	return merged, nil
+}
