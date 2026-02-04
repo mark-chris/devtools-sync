@@ -717,6 +717,75 @@ func TestListExtensionsFromDirsEmpty(t *testing.T) {
 	}
 }
 
+func TestListExtensionsWithFallback(t *testing.T) {
+	// This test verifies the fallback behavior
+	// We can't easily mock exec.Command, but we can test the logic
+	// by temporarily making 'code' unavailable
+
+	// Save original PATH
+	originalPath := os.Getenv("PATH")
+	defer func() {
+		os.Setenv("PATH", originalPath)
+	}()
+
+	// Set PATH to empty to make 'code' unavailable
+	os.Setenv("PATH", "")
+
+	// Create a temporary extension directory
+	tmpDir := t.TempDir()
+	extDir := filepath.Join(tmpDir, "extensions")
+	err := os.MkdirAll(extDir, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create test extension
+	testExtDir := filepath.Join(extDir, "test.ext-1.0.0")
+	err = os.MkdirAll(testExtDir, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{
+		"name": "ext",
+		"displayName": "Test Extension",
+		"version": "1.0.0",
+		"publisher": "test"
+	}`
+	err = os.WriteFile(filepath.Join(testExtDir, "package.json"), []byte(manifest), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Temporarily override getExtensionDirs to return our test directory
+	originalGetExtensionDirs := getExtensionDirs
+	getExtensionDirs = func() []string {
+		return []string{extDir}
+	}
+	defer func() {
+		getExtensionDirs = originalGetExtensionDirs
+	}()
+
+	// Call ListExtensions - should fall back to directory parsing
+	extensions, err := ListExtensions()
+	if err != nil {
+		t.Fatalf("ListExtensions failed: %v", err)
+	}
+
+	// Should find our test extension
+	if len(extensions) != 1 {
+		t.Errorf("expected 1 extension, got %d", len(extensions))
+	}
+
+	if len(extensions) > 0 {
+		if extensions[0].ID != "test.ext" {
+			t.Errorf("expected ID 'test.ext', got '%s'", extensions[0].ID)
+		}
+		if extensions[0].Version != "1.0.0" {
+			t.Errorf("expected version '1.0.0', got '%s'", extensions[0].Version)
+		}
+	}
+}
+
 // Helper function to check if VS Code CLI is available
 func isVSCodeInstalled() bool {
 	_, err := exec.LookPath("code")

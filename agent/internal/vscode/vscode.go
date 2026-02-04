@@ -48,8 +48,21 @@ func DetectInstallation() (bool, error) {
 }
 
 // ListExtensions returns a list of installed VS Code extensions
+// Tries CLI first, falls back to directory parsing on failure
 func ListExtensions() ([]Extension, error) {
-	// Execute code --list-extensions --show-versions
+	// Try CLI method first
+	extensions, err := listExtensionsViaCLI()
+	if err == nil {
+		return extensions, nil
+	}
+
+	// CLI failed, log and fall back to directory parsing
+	log.Printf("CLI method failed (%v), falling back to directory parsing", err)
+	return listExtensionsFromDirs(getExtensionDirs())
+}
+
+// listExtensionsViaCLI lists extensions using the VS Code CLI
+func listExtensionsViaCLI() ([]Extension, error) {
 	cmd := exec.Command("code", "--list-extensions", "--show-versions")
 	output, err := cmd.Output()
 	if err != nil {
@@ -131,8 +144,11 @@ func getVSCodePaths() []string {
 	}
 }
 
-// getExtensionDirs returns extension directory paths for VS Code and Insiders
-func getExtensionDirs() []string {
+// Variable to allow overriding in tests
+var getExtensionDirs = getExtensionDirsImpl
+
+// getExtensionDirsImpl returns extension directory paths for VS Code and Insiders
+func getExtensionDirsImpl() []string {
 	home := os.Getenv("HOME")
 	if home == "" {
 		home = os.Getenv("USERPROFILE") // Windows
