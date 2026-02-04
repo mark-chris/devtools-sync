@@ -1,6 +1,7 @@
 package vscode
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -18,6 +19,15 @@ type Extension struct {
 	DisplayName string
 	Description string
 	Publisher   string
+}
+
+// packageManifest represents the structure of a package.json file
+type packageManifest struct {
+	Name        string `json:"name"`
+	Version     string `json:"version"`
+	Publisher   string `json:"publisher"`
+	DisplayName string `json:"displayName"`
+	Description string `json:"description"`
 }
 
 // DetectInstallation checks if VS Code is installed on the system
@@ -143,4 +153,35 @@ func getExtensionDirs() []string {
 	default:
 		return []string{}
 	}
+}
+
+// parseManifest parses a package.json file and returns an Extension
+func parseManifest(data []byte, dirName string) (Extension, error) {
+	var manifest packageManifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return Extension{}, fmt.Errorf("failed to parse package.json: %w", err)
+	}
+
+	// Validate required fields
+	if manifest.Name == "" {
+		return Extension{}, errors.New("missing required field: name")
+	}
+	if manifest.Version == "" {
+		return Extension{}, errors.New("missing required field: version")
+	}
+	if manifest.Publisher == "" {
+		return Extension{}, errors.New("missing required field: publisher")
+	}
+
+	// Build extension ID from publisher.name
+	extensionID := fmt.Sprintf("%s.%s", manifest.Publisher, manifest.Name)
+
+	return Extension{
+		ID:          extensionID,
+		Version:     manifest.Version,
+		Enabled:     true,
+		DisplayName: manifest.DisplayName,
+		Description: manifest.Description,
+		Publisher:   manifest.Publisher,
+	}, nil
 }
