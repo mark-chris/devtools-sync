@@ -32,6 +32,16 @@ func TestListExtensions(t *testing.T) {
 	if extensions == nil {
 		t.Error("expected extensions slice, got nil")
 	}
+
+	// If any extensions found, verify structure
+	for _, ext := range extensions {
+		if ext.ID == "" {
+			t.Error("extension ID should not be empty")
+		}
+		// Version may be empty for CLI output without versions
+		// DisplayName, Description, Publisher may be empty from CLI
+		// (only populated when using directory parsing)
+	}
 }
 
 func TestInstallExtension(t *testing.T) {
