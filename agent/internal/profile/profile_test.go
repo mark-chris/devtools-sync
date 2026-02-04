@@ -820,3 +820,91 @@ func TestIntegration_SaveDiffLoad(t *testing.T) {
 		t.Errorf("expected to find profile '%s' in list", profileName)
 	}
 }
+
+func TestBackwardCompatibility_OldProfiles(t *testing.T) {
+	// Create temporary directory
+	tempDir := t.TempDir()
+
+	// Create an old-format profile (before validation was added)
+	// This simulates a profile created by an older version
+	oldProfile := Profile{
+		Name:      "old-profile",
+		CreatedAt: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+		UpdatedAt: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+		Extensions: []Extension{
+			{ID: "ms-python.python", Version: "2023.1.0", Enabled: true},
+			{ID: "golang.go", Version: "0.38.0", Enabled: true},
+		},
+	}
+
+	// Write old profile directly to file (bypassing Save function)
+	data, err := json.MarshalIndent(oldProfile, "", "  ")
+	if err != nil {
+		t.Fatalf("failed to marshal old profile: %v", err)
+	}
+
+	profilePath := filepath.Join(tempDir, "old-profile.json")
+	if err := os.WriteFile(profilePath, data, 0644); err != nil {
+		t.Fatalf("failed to write old profile file: %v", err)
+	}
+
+	// Test 1: Get should work with old profile
+	retrieved, err := Get("old-profile", tempDir)
+	if err != nil {
+		t.Fatalf("Get failed on old profile: %v", err)
+	}
+	if retrieved.Name != "old-profile" {
+		t.Errorf("expected profile name 'old-profile', got '%s'", retrieved.Name)
+	}
+	if len(retrieved.Extensions) != 2 {
+		t.Errorf("expected 2 extensions, got %d", len(retrieved.Extensions))
+	}
+
+	// Test 2: Validate should work with old profile
+	err = Validate(retrieved)
+	if err != nil {
+		t.Errorf("Validate failed on old profile: %v", err)
+	}
+
+	// Test 3: Diff should work with old profile
+	diffResult, err := Diff("old-profile", tempDir)
+	if err != nil {
+		// May fail if VS Code not available, that's acceptable
+		if strings.Contains(err.Error(), "failed to list installed extensions") {
+			t.Logf("Diff skipped: VS Code not available")
+			return
+		}
+		t.Fatalf("Diff failed on old profile: %v", err)
+	}
+
+	// Verify diff result structure is correct
+	if diffResult.ProfileName != "old-profile" {
+		t.Errorf("expected profile name 'old-profile', got '%s'", diffResult.ProfileName)
+	}
+	if diffResult.TotalInProfile != 2 {
+		t.Errorf("expected TotalInProfile 2, got %d", diffResult.TotalInProfile)
+	}
+
+	// ToInstall + AlreadyInstalled should equal TotalInProfile
+	total := len(diffResult.ToInstall) + len(diffResult.AlreadyInstalled)
+	if total != diffResult.TotalInProfile {
+		t.Errorf("expected ToInstall + AlreadyInstalled = %d, got %d", diffResult.TotalInProfile, total)
+	}
+
+	// Test 4: List should include old profile
+	profiles, err := List(tempDir)
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+
+	found := false
+	for _, p := range profiles {
+		if p.Name == "old-profile" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected to find 'old-profile' in list")
+	}
+}
