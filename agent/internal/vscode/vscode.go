@@ -408,3 +408,21 @@ func loadDisabledExtensions(statePath string) (map[string]bool, error) {
 
 	return disabled, nil
 }
+
+// applyEnabledState updates the Enabled field of extensions based on the disabled map.
+// Returns a new slice with updated Enabled fields. Original slice is not modified.
+func applyEnabledState(extensions []Extension, disabled map[string]bool) []Extension {
+	// Create new slice to avoid modifying input
+	result := make([]Extension, len(extensions))
+
+	for i, ext := range extensions {
+		// Copy extension
+		result[i] = ext
+		// Update enabled state based on disabled map
+		if disabled[ext.ID] {
+			result[i].Enabled = false
+		}
+	}
+
+	return result
+}

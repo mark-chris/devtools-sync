@@ -1020,6 +1020,150 @@ func TestLoadDisabledExtensionsMissingFile(t *testing.T) {
 	}
 }
 
+func TestApplyEnabledState(t *testing.T) {
+	tests := []struct {
+		name       string
+		extensions []Extension
+		disabled   map[string]bool
+		want       []Extension
+	}{
+		{
+			name: "all extensions enabled",
+			extensions: []Extension{
+				{ID: "ms-python.python", Version: "2024.0.0", Enabled: true},
+				{ID: "golang.go", Version: "0.40.0", Enabled: true},
+			},
+			disabled: map[string]bool{},
+			want: []Extension{
+				{ID: "ms-python.python", Version: "2024.0.0", Enabled: true},
+				{ID: "golang.go", Version: "0.40.0", Enabled: true},
+			},
+		},
+		{
+			name: "some extensions disabled",
+			extensions: []Extension{
+				{ID: "ms-python.python", Version: "2024.0.0", Enabled: true},
+				{ID: "golang.go", Version: "0.40.0", Enabled: true},
+				{ID: "ms-vscode.cpptools", Version: "1.15.0", Enabled: true},
+			},
+			disabled: map[string]bool{
+				"golang.go": true,
+			},
+			want: []Extension{
+				{ID: "ms-python.python", Version: "2024.0.0", Enabled: true},
+				{ID: "golang.go", Version: "0.40.0", Enabled: false},
+				{ID: "ms-vscode.cpptools", Version: "1.15.0", Enabled: true},
+			},
+		},
+		{
+			name: "all extensions disabled",
+			extensions: []Extension{
+				{ID: "ms-python.python", Version: "2024.0.0", Enabled: true},
+				{ID: "golang.go", Version: "0.40.0", Enabled: true},
+			},
+			disabled: map[string]bool{
+				"ms-python.python": true,
+				"golang.go":        true,
+			},
+			want: []Extension{
+				{ID: "ms-python.python", Version: "2024.0.0", Enabled: false},
+				{ID: "golang.go", Version: "0.40.0", Enabled: false},
+			},
+		},
+		{
+			name:       "empty extensions slice",
+			extensions: []Extension{},
+			disabled: map[string]bool{
+				"ms-python.python": true,
+			},
+			want: []Extension{},
+		},
+		{
+			name: "nil disabled map",
+			extensions: []Extension{
+				{ID: "ms-python.python", Version: "2024.0.0", Enabled: true},
+			},
+			disabled: nil,
+			want: []Extension{
+				{ID: "ms-python.python", Version: "2024.0.0", Enabled: true},
+			},
+		},
+		{
+			name: "disabled map has extra entries not in extensions",
+			extensions: []Extension{
+				{ID: "ms-python.python", Version: "2024.0.0", Enabled: true},
+			},
+			disabled: map[string]bool{
+				"golang.go":        true,
+				"nonexistent.ext":  true,
+			},
+			want: []Extension{
+				{ID: "ms-python.python", Version: "2024.0.0", Enabled: true},
+			},
+		},
+		{
+			name: "preserves other extension fields",
+			extensions: []Extension{
+				{
+					ID:          "ms-python.python",
+					Version:     "2024.0.0",
+					Enabled:     true,
+					DisplayName: "Python",
+					Description: "Python extension",
+					Publisher:   "ms-python",
+				},
+			},
+			disabled: map[string]bool{
+				"ms-python.python": true,
+			},
+			want: []Extension{
+				{
+					ID:          "ms-python.python",
+					Version:     "2024.0.0",
+					Enabled:     false,
+					DisplayName: "Python",
+					Description: "Python extension",
+					Publisher:   "ms-python",
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := applyEnabledState(tt.extensions, tt.disabled)
+
+			if len(got) != len(tt.want) {
+				t.Errorf("got %d extensions, want %d", len(got), len(tt.want))
+			}
+
+			for i := range got {
+				if i >= len(tt.want) {
+					break
+				}
+				if got[i].ID != tt.want[i].ID {
+					t.Errorf("extension[%d].ID = %v, want %v", i, got[i].ID, tt.want[i].ID)
+				}
+				if got[i].Version != tt.want[i].Version {
+					t.Errorf("extension[%d].Version = %v, want %v", i, got[i].Version, tt.want[i].Version)
+				}
+				if got[i].Enabled != tt.want[i].Enabled {
+					t.Errorf("extension[%d].Enabled = %v, want %v", i, got[i].Enabled, tt.want[i].Enabled)
+				}
+				if got[i].DisplayName != tt.want[i].DisplayName {
+					t.Errorf("extension[%d].DisplayName = %v, want %v", i, got[i].DisplayName, tt.want[i].DisplayName)
+				}
+				if got[i].Description != tt.want[i].Description {
+					t.Errorf("extension[%d].Description = %v, want %v", i, got[i].Description, tt.want[i].Description)
+				}
+				if got[i].Publisher != tt.want[i].Publisher {
+					t.Errorf("extension[%d].Publisher = %v, want %v", i, got[i].Publisher, tt.want[i].Publisher)
+				}
+			}
+		})
+	}
+}
+
 // Helper function to check if VS Code CLI is available
 func isVSCodeInstalled() bool {
 	_, err := exec.LookPath("code")
