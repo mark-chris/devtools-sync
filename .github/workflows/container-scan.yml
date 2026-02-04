@@ -42,7 +42,7 @@ jobs:
           trivyignores: '.trivyignore'
 
       - name: Upload Trivy scan results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: 'trivy-server-results.sarif'
@@ -72,7 +72,7 @@ jobs:
           ignore-unfixed: true  # Ignore unfixed vulnerabilities (glibc CVEs pending Debian backport)
 
       - name: Upload Trivy scan results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: 'trivy-dashboard-results.sarif'
