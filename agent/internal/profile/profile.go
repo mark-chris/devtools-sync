@@ -41,6 +41,32 @@ func Validate(profile *Profile) error {
 		}
 	}
 
+	// Check extension IDs
+	for _, ext := range profile.Extensions {
+		// Check if extension ID is empty
+		if ext.ID == "" {
+			return fmt.Errorf("extension ID cannot be empty")
+		}
+
+		// Check if extension ID contains spaces
+		if strings.Contains(ext.ID, " ") {
+			return fmt.Errorf("extension ID '%s' must be in format 'publisher.name'", ext.ID)
+		}
+
+		// Split by dot to check format
+		parts := strings.Split(ext.ID, ".")
+
+		// Must have exactly 2 parts (publisher.name)
+		if len(parts) != 2 {
+			return fmt.Errorf("extension ID '%s' must be in format 'publisher.name'", ext.ID)
+		}
+
+		// Both parts must be non-empty
+		if parts[0] == "" || parts[1] == "" {
+			return fmt.Errorf("extension ID '%s' must be in format 'publisher.name'", ext.ID)
+		}
+	}
+
 	return nil
 }
 

@@ -334,3 +334,95 @@ func TestValidate_InvalidFilename(t *testing.T) {
 		})
 	}
 }
+
+func TestValidate_ValidExtensions(t *testing.T) {
+	profile := &Profile{
+		Name:      "test-profile",
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		Extensions: []Extension{
+			{ID: "ms-python.python", Version: "1.0.0", Enabled: true},
+			{ID: "golang.go", Version: "2.0.0", Enabled: true},
+		},
+	}
+
+	err := Validate(profile)
+	if err != nil {
+		t.Errorf("expected no error for valid extensions, got: %v", err)
+	}
+}
+
+func TestValidate_InvalidExtensionID(t *testing.T) {
+	tests := []struct {
+		name        string
+		extensionID string
+		expectedErr string
+	}{
+		{
+			name:        "empty ID",
+			extensionID: "",
+			expectedErr: "extension ID cannot be empty",
+		},
+		{
+			name:        "no dot",
+			extensionID: "nodot",
+			expectedErr: "extension ID 'nodot' must be in format 'publisher.name'",
+		},
+		{
+			name:        "multiple dots",
+			extensionID: "too.many.dots",
+			expectedErr: "extension ID 'too.many.dots' must be in format 'publisher.name'",
+		},
+		{
+			name:        "with space",
+			extensionID: "has space.name",
+			expectedErr: "extension ID 'has space.name' must be in format 'publisher.name'",
+		},
+		{
+			name:        "trailing dot",
+			extensionID: "publisher.",
+			expectedErr: "extension ID 'publisher.' must be in format 'publisher.name'",
+		},
+		{
+			name:        "leading dot",
+			extensionID: ".name",
+			expectedErr: "extension ID '.name' must be in format 'publisher.name'",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			profile := &Profile{
+				Name:      "test-profile",
+				CreatedAt: time.Now(),
+				UpdatedAt: time.Now(),
+				Extensions: []Extension{
+					{ID: tt.extensionID, Version: "1.0.0", Enabled: true},
+				},
+			}
+
+			err := Validate(profile)
+			if err == nil {
+				t.Errorf("expected error for %s, got nil", tt.name)
+			}
+
+			if err != nil && err.Error() != tt.expectedErr {
+				t.Errorf("expected error '%s', got '%s'", tt.expectedErr, err.Error())
+			}
+		})
+	}
+}
+
+func TestValidate_EmptyExtensionsList(t *testing.T) {
+	profile := &Profile{
+		Name:       "test-profile",
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+		Extensions: []Extension{},
+	}
+
+	err := Validate(profile)
+	if err != nil {
+		t.Errorf("expected no error for empty extensions list, got: %v", err)
+	}
+}
