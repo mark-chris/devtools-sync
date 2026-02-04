@@ -624,3 +624,116 @@ func TestLoad_SkipsAlreadyInstalled(t *testing.T) {
 		t.Errorf("expected 1 extension, got %d", len(loadedProfile.Extensions))
 	}
 }
+
+func TestDiff_ValidProfile(t *testing.T) {
+	// Create temporary directory
+	tempDir := t.TempDir()
+
+	// Create profile with 2 extensions
+	profile := Profile{
+		Name:      "diff-test",
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		Extensions: []Extension{
+			{ID: "ms-python.python", Version: "1.0.0", Enabled: true},
+			{ID: "golang.go", Version: "2.0.0", Enabled: true},
+		},
+	}
+
+	// Write profile to file
+	data, err := json.MarshalIndent(profile, "", "  ")
+	if err != nil {
+		t.Fatalf("failed to marshal profile: %v", err)
+	}
+
+	profilePath := filepath.Join(tempDir, "diff-test.json")
+	if err := os.WriteFile(profilePath, data, 0644); err != nil {
+		t.Fatalf("failed to write profile file: %v", err)
+	}
+
+	// Call Diff
+	result, err := Diff("diff-test", tempDir)
+
+	// May fail if VS Code not available, that's acceptable
+	if err != nil {
+		if strings.Contains(err.Error(), "failed to list installed extensions") {
+			t.Logf("Diff failed as expected without VS Code: %v", err)
+			return
+		}
+		t.Fatalf("Diff failed with unexpected error: %v", err)
+	}
+
+	// Verify result structure
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if result.ProfileName != "diff-test" {
+		t.Errorf("expected profile name 'diff-test', got '%s'", result.ProfileName)
+	}
+	if result.TotalInProfile != 2 {
+		t.Errorf("expected TotalInProfile 2, got %d", result.TotalInProfile)
+	}
+
+	// ToInstall + AlreadyInstalled should equal TotalInProfile
+	total := len(result.ToInstall) + len(result.AlreadyInstalled)
+	if total != result.TotalInProfile {
+		t.Errorf("expected ToInstall + AlreadyInstalled = %d, got %d", result.TotalInProfile, total)
+	}
+}
+
+func TestDiff_ProfileNotFound(t *testing.T) {
+	// Create temporary directory
+	tempDir := t.TempDir()
+
+	// Call Diff with nonexistent profile
+	_, err := Diff("nonexistent", tempDir)
+
+	// Should return error
+	if err == nil {
+		t.Error("expected error for nonexistent profile, got nil")
+	}
+
+	// Error should contain "not found"
+	if err != nil && !strings.Contains(err.Error(), "not found") {
+		t.Errorf("expected error to contain 'not found', got: %s", err.Error())
+	}
+}
+
+func TestDiff_InvalidProfile(t *testing.T) {
+	// Create temporary directory
+	tempDir := t.TempDir()
+
+	// Create profile with bad extension ID
+	profile := Profile{
+		Name:      "invalid-diff",
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		Extensions: []Extension{
+			{ID: "bad-extension-id", Version: "1.0.0", Enabled: true},
+		},
+	}
+
+	// Write profile to file
+	data, err := json.MarshalIndent(profile, "", "  ")
+	if err != nil {
+		t.Fatalf("failed to marshal profile: %v", err)
+	}
+
+	profilePath := filepath.Join(tempDir, "invalid-diff.json")
+	if err := os.WriteFile(profilePath, data, 0644); err != nil {
+		t.Fatalf("failed to write profile file: %v", err)
+	}
+
+	// Call Diff
+	_, err = Diff("invalid-diff", tempDir)
+
+	// Should return validation error
+	if err == nil {
+		t.Error("expected validation error, got nil")
+	}
+
+	// Error should mention format requirement
+	if err != nil && !strings.Contains(err.Error(), "must be in format") {
+		t.Errorf("expected error to contain 'must be in format', got: %s", err.Error())
+	}
+}

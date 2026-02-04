@@ -91,6 +91,61 @@ func detectConflicts(profileExtensions []Extension, installedExtensions []vscode
 	return toInstall, alreadyInstalled
 }
 
+// DiffResult contains the comparison between a profile and installed extensions
+type DiffResult struct {
+	ProfileName      string
+	ToInstall        []Extension
+	AlreadyInstalled []Extension
+	TotalInProfile   int
+}
+
+// Diff compares a profile with currently installed extensions
+func Diff(profileName string, profilesDir string) (*DiffResult, error) {
+	if profileName == "" {
+		return nil, fmt.Errorf("profile name cannot be empty")
+	}
+
+	// Read profile file
+	profilePath := filepath.Join(profilesDir, profileName+".json")
+	data, err := os.ReadFile(profilePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("profile '%s' not found", profileName)
+		}
+		return nil, fmt.Errorf("failed to read profile file: %w", err)
+	}
+
+	// Parse profile
+	var profile Profile
+	if err := json.Unmarshal(data, &profile); err != nil {
+		return nil, fmt.Errorf("failed to parse profile file: %w", err)
+	}
+
+	// Validate profile
+	if err := Validate(&profile); err != nil {
+		return nil, fmt.Errorf("invalid profile: %w", err)
+	}
+
+	// Get currently installed extensions
+	installedExts, err := vscode.ListExtensions()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list installed extensions: %w", err)
+	}
+
+	// Detect conflicts
+	toInstall, alreadyInstalled := detectConflicts(profile.Extensions, installedExts)
+
+	// Build result
+	result := &DiffResult{
+		ProfileName:      profile.Name,
+		ToInstall:        toInstall,
+		AlreadyInstalled: alreadyInstalled,
+		TotalInProfile:   len(profile.Extensions),
+	}
+
+	return result, nil
+}
+
 // Save captures current VS Code extensions to a profile
 func Save(name string, profilesDir string) (*Profile, error) {
 	if name == "" {
