@@ -890,6 +890,136 @@ func TestGetStatePathsByOS(t *testing.T) {
 	}
 }
 
+func TestLoadDisabledExtensions(t *testing.T) {
+	tests := []struct {
+		name        string
+		storageJSON string
+		want        map[string]bool
+		wantErr     bool
+	}{
+		{
+			name: "valid storage.json with disabled extensions",
+			storageJSON: `{
+				"extensionsIdentifiers/disabled": [
+					{"id": "ms-python.python"},
+					{"id": "golang.go"}
+				]
+			}`,
+			want: map[string]bool{
+				"ms-python.python": true,
+				"golang.go":        true,
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid storage.json with empty disabled array",
+			storageJSON: `{
+				"extensionsIdentifiers/disabled": []
+			}`,
+			want:    map[string]bool{},
+			wantErr: false,
+		},
+		{
+			name:        "valid storage.json without disabled field",
+			storageJSON: `{"otherField": "value"}`,
+			want:        map[string]bool{},
+			wantErr:     false,
+		},
+		{
+			name:        "empty JSON object",
+			storageJSON: `{}`,
+			want:        map[string]bool{},
+			wantErr:     false,
+		},
+		{
+			name:        "invalid JSON",
+			storageJSON: `{invalid json}`,
+			want:        nil,
+			wantErr:     true,
+		},
+		{
+			name: "disabled extensions with extra fields",
+			storageJSON: `{
+				"extensionsIdentifiers/disabled": [
+					{"id": "ms-python.python", "uuid": "some-uuid"},
+					{"id": "golang.go"}
+				],
+				"otherField": "value"
+			}`,
+			want: map[string]bool{
+				"ms-python.python": true,
+				"golang.go":        true,
+			},
+			wantErr: false,
+		},
+		{
+			name: "disabled extensions with missing id field",
+			storageJSON: `{
+				"extensionsIdentifiers/disabled": [
+					{"id": "ms-python.python"},
+					{"uuid": "some-uuid"}
+				]
+			}`,
+			want: map[string]bool{
+				"ms-python.python": true,
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create temporary file with test data
+			tmpFile := filepath.Join(t.TempDir(), "storage.json")
+			err := os.WriteFile(tmpFile, []byte(tt.storageJSON), 0644)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			got, err := loadDisabledExtensions(tmpFile)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("expected error, got nil")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+
+			if len(got) != len(tt.want) {
+				t.Errorf("got %d disabled extensions, want %d", len(got), len(tt.want))
+			}
+
+			for id := range tt.want {
+				if !got[id] {
+					t.Errorf("expected %s to be disabled", id)
+				}
+			}
+
+			for id := range got {
+				if !tt.want[id] {
+					t.Errorf("unexpected disabled extension: %s", id)
+				}
+			}
+		})
+	}
+}
+
+func TestLoadDisabledExtensionsMissingFile(t *testing.T) {
+	// Test with non-existent file - should return empty map, no error
+	got, err := loadDisabledExtensions("/nonexistent/storage.json")
+	if err != nil {
+		t.Errorf("expected no error for missing file, got: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("expected empty map for missing file, got %d entries", len(got))
+	}
+}
+
 // Helper function to check if VS Code CLI is available
 func isVSCodeInstalled() bool {
 	_, err := exec.LookPath("code")

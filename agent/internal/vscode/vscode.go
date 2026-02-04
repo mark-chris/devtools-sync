@@ -364,3 +364,47 @@ func getStatePaths() []string {
 
 	return paths
 }
+
+// extensionIdentifier represents an extension identifier in storage.json
+type extensionIdentifier struct {
+	ID string `json:"id"`
+}
+
+// storageData represents the structure of storage.json
+type storageData struct {
+	DisabledExtensions []extensionIdentifier `json:"extensionsIdentifiers/disabled"`
+}
+
+// loadDisabledExtensions parses storage.json and extracts disabled extension IDs.
+// Returns a map for fast lookup. Handles missing files gracefully by returning
+// an empty map without error.
+func loadDisabledExtensions(statePath string) (map[string]bool, error) {
+	// Check if file exists
+	if _, err := os.Stat(statePath); os.IsNotExist(err) {
+		// File doesn't exist - return empty map, no error
+		return map[string]bool{}, nil
+	}
+
+	// Read file
+	data, err := os.ReadFile(statePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read storage.json: %w", err)
+	}
+
+	// Parse JSON
+	var storage storageData
+	if err := json.Unmarshal(data, &storage); err != nil {
+		return nil, fmt.Errorf("failed to parse storage.json: %w", err)
+	}
+
+	// Build map of disabled extensions
+	disabled := make(map[string]bool)
+	for _, ext := range storage.DisabledExtensions {
+		// Skip entries without ID (malformed data)
+		if ext.ID != "" {
+			disabled[ext.ID] = true
+		}
+	}
+
+	return disabled, nil
+}
