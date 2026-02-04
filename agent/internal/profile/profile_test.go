@@ -276,3 +276,61 @@ func TestProfile_JSONMarshaling(t *testing.T) {
 		t.Errorf("extensions count mismatch: expected %d, got %d", len(profile.Extensions), len(decoded.Extensions))
 	}
 }
+
+func TestValidate_ValidProfile(t *testing.T) {
+	profile := &Profile{
+		Name:       "my-profile",
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+		Extensions: []Extension{},
+	}
+
+	err := Validate(profile)
+	if err != nil {
+		t.Errorf("expected no error for valid profile, got: %v", err)
+	}
+}
+
+func TestValidate_EmptyName(t *testing.T) {
+	profile := &Profile{
+		Name:       "",
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+		Extensions: []Extension{},
+	}
+
+	err := Validate(profile)
+	if err == nil {
+		t.Error("expected error for empty profile name, got nil")
+	}
+
+	expectedMsg := "profile name cannot be empty"
+	if err != nil && err.Error() != expectedMsg {
+		t.Errorf("expected error message '%s', got '%s'", expectedMsg, err.Error())
+	}
+}
+
+func TestValidate_InvalidFilename(t *testing.T) {
+	invalidChars := []string{"/", "\\", ":", "*", "?", "\"", "<", ">", "|"}
+
+	for _, char := range invalidChars {
+		t.Run("char_"+char, func(t *testing.T) {
+			profile := &Profile{
+				Name:       "invalid" + char + "name",
+				CreatedAt:  time.Now(),
+				UpdatedAt:  time.Now(),
+				Extensions: []Extension{},
+			}
+
+			err := Validate(profile)
+			if err == nil {
+				t.Errorf("expected error for profile name with '%s', got nil", char)
+			}
+
+			expectedMsg := "profile name contains invalid characters"
+			if err != nil && err.Error() != expectedMsg {
+				t.Errorf("expected error message '%s', got '%s'", expectedMsg, err.Error())
+			}
+		})
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/mark-chris/devtools-sync/agent/internal/vscode"
@@ -23,6 +24,24 @@ type Profile struct {
 	CreatedAt  time.Time   `json:"created_at"`
 	UpdatedAt  time.Time   `json:"updated_at"`
 	Extensions []Extension `json:"extensions"`
+}
+
+// Validate checks if the profile has valid data
+func Validate(profile *Profile) error {
+	// Check profile name
+	if profile.Name == "" {
+		return fmt.Errorf("profile name cannot be empty")
+	}
+
+	// Check for invalid filename characters
+	invalidChars := []string{"/", "\\", ":", "*", "?", "\"", "<", ">", "|"}
+	for _, char := range invalidChars {
+		if strings.Contains(profile.Name, char) {
+			return fmt.Errorf("profile name contains invalid characters")
+		}
+	}
+
+	return nil
 }
 
 // Save captures current VS Code extensions to a profile
