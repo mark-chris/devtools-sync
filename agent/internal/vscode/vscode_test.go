@@ -1020,6 +1020,281 @@ func TestLoadDisabledExtensionsMissingFile(t *testing.T) {
 	}
 }
 
+func TestListExtensionsFromDirsWithState(t *testing.T) {
+	// Create temporary test directories
+	tmpDir1 := t.TempDir()
+	tmpDir2 := t.TempDir()
+	tmpStateDir := t.TempDir()
+
+	// Setup first directory with Python and Go extensions
+	ext1Dir := filepath.Join(tmpDir1, "ms-python.python-2024.0.0")
+	err := os.MkdirAll(ext1Dir, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest1 := `{
+		"name": "python",
+		"displayName": "Python",
+		"description": "Python extension",
+		"version": "2024.0.0",
+		"publisher": "ms-python"
+	}`
+	err = os.WriteFile(filepath.Join(ext1Dir, "package.json"), []byte(manifest1), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ext2Dir := filepath.Join(tmpDir1, "golang.go-0.40.0")
+	err = os.MkdirAll(ext2Dir, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest2 := `{
+		"name": "go",
+		"version": "0.40.0",
+		"publisher": "golang"
+	}`
+	err = os.WriteFile(filepath.Join(ext2Dir, "package.json"), []byte(manifest2), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Setup second directory with C++ extension
+	ext3Dir := filepath.Join(tmpDir2, "ms-vscode.cpptools-1.15.0")
+	err = os.MkdirAll(ext3Dir, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest3 := `{
+		"name": "cpptools",
+		"version": "1.15.0",
+		"publisher": "ms-vscode"
+	}`
+	err = os.WriteFile(filepath.Join(ext3Dir, "package.json"), []byte(manifest3), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create storage.json with Python disabled
+	storageJSON := `{
+		"extensionsIdentifiers/disabled": [
+			{"id": "ms-python.python"}
+		]
+	}`
+	storagePath := filepath.Join(tmpStateDir, "storage.json")
+	err = os.WriteFile(storagePath, []byte(storageJSON), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Test with state
+	dirs := []string{tmpDir1, tmpDir2}
+	statePaths := []string{storagePath}
+	extensions, err := listExtensionsFromDirsWithState(dirs, statePaths)
+	if err != nil {
+		t.Fatalf("listExtensionsFromDirsWithState failed: %v", err)
+	}
+
+	// Should find 3 extensions
+	if len(extensions) != 3 {
+		t.Errorf("expected 3 extensions, got %d", len(extensions))
+	}
+
+	// Check each extension
+	extMap := make(map[string]Extension)
+	for _, ext := range extensions {
+		extMap[ext.ID] = ext
+	}
+
+	// Python should be disabled
+	if python, found := extMap["ms-python.python"]; !found {
+		t.Error("Python extension not found")
+	} else {
+		if python.Enabled {
+			t.Error("Python extension should be disabled")
+		}
+		if python.Version != "2024.0.0" {
+			t.Errorf("expected Python version 2024.0.0, got %s", python.Version)
+		}
+	}
+
+	// Go should be enabled
+	if goExt, found := extMap["golang.go"]; !found {
+		t.Error("Go extension not found")
+	} else {
+		if !goExt.Enabled {
+			t.Error("Go extension should be enabled")
+		}
+	}
+
+	// C++ should be enabled
+	if cpp, found := extMap["ms-vscode.cpptools"]; !found {
+		t.Error("C++ extension not found")
+	} else {
+		if !cpp.Enabled {
+			t.Error("C++ extension should be enabled")
+		}
+	}
+}
+
+func TestListExtensionsFromDirsWithStateMultipleStorageFiles(t *testing.T) {
+	// Create temporary test directories
+	tmpDir := t.TempDir()
+	tmpStateDir1 := t.TempDir()
+	tmpStateDir2 := t.TempDir()
+
+	// Setup extensions
+	ext1Dir := filepath.Join(tmpDir, "ms-python.python-2024.0.0")
+	err := os.MkdirAll(ext1Dir, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest1 := `{
+		"name": "python",
+		"version": "2024.0.0",
+		"publisher": "ms-python"
+	}`
+	err = os.WriteFile(filepath.Join(ext1Dir, "package.json"), []byte(manifest1), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ext2Dir := filepath.Join(tmpDir, "golang.go-0.40.0")
+	err = os.MkdirAll(ext2Dir, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest2 := `{
+		"name": "go",
+		"version": "0.40.0",
+		"publisher": "golang"
+	}`
+	err = os.WriteFile(filepath.Join(ext2Dir, "package.json"), []byte(manifest2), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create first storage.json with Python disabled
+	storage1JSON := `{
+		"extensionsIdentifiers/disabled": [
+			{"id": "ms-python.python"}
+		]
+	}`
+	storage1Path := filepath.Join(tmpStateDir1, "storage.json")
+	err = os.WriteFile(storage1Path, []byte(storage1JSON), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create second storage.json with Go disabled
+	storage2JSON := `{
+		"extensionsIdentifiers/disabled": [
+			{"id": "golang.go"}
+		]
+	}`
+	storage2Path := filepath.Join(tmpStateDir2, "storage.json")
+	err = os.WriteFile(storage2Path, []byte(storage2JSON), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Test with both state files - should merge disabled lists
+	dirs := []string{tmpDir}
+	statePaths := []string{storage1Path, storage2Path}
+	extensions, err := listExtensionsFromDirsWithState(dirs, statePaths)
+	if err != nil {
+		t.Fatalf("listExtensionsFromDirsWithState failed: %v", err)
+	}
+
+	// Should find 2 extensions
+	if len(extensions) != 2 {
+		t.Errorf("expected 2 extensions, got %d", len(extensions))
+	}
+
+	// Both should be disabled (merged from both storage files)
+	for _, ext := range extensions {
+		if ext.Enabled {
+			t.Errorf("extension %s should be disabled", ext.ID)
+		}
+	}
+}
+
+func TestListExtensionsFromDirsWithStateNoState(t *testing.T) {
+	// Create temporary test directory
+	tmpDir := t.TempDir()
+
+	// Setup extension
+	extDir := filepath.Join(tmpDir, "golang.go-0.40.0")
+	err := os.MkdirAll(extDir, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{
+		"name": "go",
+		"version": "0.40.0",
+		"publisher": "golang"
+	}`
+	err = os.WriteFile(filepath.Join(extDir, "package.json"), []byte(manifest), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Test with no state paths
+	dirs := []string{tmpDir}
+	statePaths := []string{}
+	extensions, err := listExtensionsFromDirsWithState(dirs, statePaths)
+	if err != nil {
+		t.Fatalf("listExtensionsFromDirsWithState failed: %v", err)
+	}
+
+	// Should find 1 extension, enabled by default
+	if len(extensions) != 1 {
+		t.Errorf("expected 1 extension, got %d", len(extensions))
+	}
+
+	if len(extensions) > 0 && !extensions[0].Enabled {
+		t.Error("extension should be enabled when no state files provided")
+	}
+}
+
+func TestListExtensionsFromDirsWithStateNonexistentStateFile(t *testing.T) {
+	// Create temporary test directory
+	tmpDir := t.TempDir()
+
+	// Setup extension
+	extDir := filepath.Join(tmpDir, "golang.go-0.40.0")
+	err := os.MkdirAll(extDir, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{
+		"name": "go",
+		"version": "0.40.0",
+		"publisher": "golang"
+	}`
+	err = os.WriteFile(filepath.Join(extDir, "package.json"), []byte(manifest), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Test with nonexistent state file - should not error
+	dirs := []string{tmpDir}
+	statePaths := []string{"/nonexistent/storage.json"}
+	extensions, err := listExtensionsFromDirsWithState(dirs, statePaths)
+	if err != nil {
+		t.Fatalf("listExtensionsFromDirsWithState failed: %v", err)
+	}
+
+	// Should find 1 extension, enabled by default
+	if len(extensions) != 1 {
+		t.Errorf("expected 1 extension, got %d", len(extensions))
+	}
+
+	if len(extensions) > 0 && !extensions[0].Enabled {
+		t.Error("extension should be enabled when state file doesn't exist")
+	}
+}
+
 func TestApplyEnabledState(t *testing.T) {
 	tests := []struct {
 		name       string

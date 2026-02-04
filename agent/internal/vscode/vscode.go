@@ -426,3 +426,32 @@ func applyEnabledState(extensions []Extension, disabled map[string]bool) []Exten
 
 	return result
 }
+
+// listExtensionsFromDirsWithState scans multiple directories for installed extensions,
+// loads disabled state from storage.json files, and applies the state.
+// Continues on errors with log.Printf warnings.
+func listExtensionsFromDirsWithState(extensionDirs []string, statePaths []string) ([]Extension, error) {
+	// First, get all extensions from directories
+	extensions, err := listExtensionsFromDirs(extensionDirs)
+	if err != nil {
+		return nil, err
+	}
+
+	// Load disabled extensions from all state files
+	allDisabled := make(map[string]bool)
+	for _, statePath := range statePaths {
+		disabled, err := loadDisabledExtensions(statePath)
+		if err != nil {
+			// Log warning but continue with other state files
+			log.Printf("Warning: failed to load disabled extensions from %s: %v", statePath, err)
+			continue
+		}
+		// Merge disabled extensions
+		for id := range disabled {
+			allDisabled[id] = true
+		}
+	}
+
+	// Apply enabled state
+	return applyEnabledState(extensions, allDisabled), nil
+}
