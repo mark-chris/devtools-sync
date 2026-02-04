@@ -1546,6 +1546,194 @@ func TestApplyEnabledState(t *testing.T) {
 	}
 }
 
+func TestIntegrationFullExtensionDetection(t *testing.T) {
+	// Create comprehensive test environment
+	tmpDir := t.TempDir()
+
+	// Create two "installations" (stable and insiders)
+	stableExtDir := filepath.Join(tmpDir, "stable", "extensions")
+	insidersExtDir := filepath.Join(tmpDir, "insiders", "extensions")
+	err := os.MkdirAll(stableExtDir, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = os.MkdirAll(insidersExtDir, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Stable: Python 2024.0.0 (enabled), Go 0.39.0 (disabled)
+	pythonStableDir := filepath.Join(stableExtDir, "ms-python.python-2024.0.0")
+	err = os.MkdirAll(pythonStableDir, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pythonManifest := `{
+		"name": "python",
+		"displayName": "Python",
+		"description": "Python language support",
+		"version": "2024.0.0",
+		"publisher": "ms-python"
+	}`
+	err = os.WriteFile(filepath.Join(pythonStableDir, "package.json"), []byte(pythonManifest), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	goStableDir := filepath.Join(stableExtDir, "golang.go-0.39.0")
+	err = os.MkdirAll(goStableDir, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	goManifest := `{
+		"name": "go",
+		"displayName": "Go",
+		"description": "Go language support",
+		"version": "0.39.0",
+		"publisher": "golang"
+	}`
+	err = os.WriteFile(filepath.Join(goStableDir, "package.json"), []byte(goManifest), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Insiders: Python 2024.1.0 (newer), Rust 1.0.0 (unique)
+	pythonInsidersDir := filepath.Join(insidersExtDir, "ms-python.python-2024.1.0")
+	err = os.MkdirAll(pythonInsidersDir, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pythonInsidersManifest := `{
+		"name": "python",
+		"displayName": "Python Insiders",
+		"description": "Python language support (Insiders)",
+		"version": "2024.1.0",
+		"publisher": "ms-python"
+	}`
+	err = os.WriteFile(filepath.Join(pythonInsidersDir, "package.json"), []byte(pythonInsidersManifest), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rustInsidersDir := filepath.Join(insidersExtDir, "rust-lang.rust-1.0.0")
+	err = os.MkdirAll(rustInsidersDir, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rustManifest := `{
+		"name": "rust",
+		"displayName": "Rust",
+		"description": "Rust language support",
+		"version": "1.0.0",
+		"publisher": "rust-lang"
+	}`
+	err = os.WriteFile(filepath.Join(rustInsidersDir, "package.json"), []byte(rustManifest), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create state files
+	stableStateDir := filepath.Join(tmpDir, "stable", "state")
+	err = os.MkdirAll(stableStateDir, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stableStateFile := filepath.Join(stableStateDir, "storage.json")
+	stableState := `{
+		"extensionsIdentifiers/disabled": [{"id": "golang.go"}]
+	}`
+	err = os.WriteFile(stableStateFile, []byte(stableState), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	insidersStateDir := filepath.Join(tmpDir, "insiders", "state")
+	err = os.MkdirAll(insidersStateDir, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	insidersStateFile := filepath.Join(insidersStateDir, "storage.json")
+	insidersState := `{
+		"extensionsIdentifiers/disabled": []
+	}`
+	err = os.WriteFile(insidersStateFile, []byte(insidersState), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Run detection
+	extensions, err := listExtensionsFromDirsWithState(
+		[]string{stableExtDir, insidersExtDir},
+		[]string{stableStateFile, insidersStateFile},
+	)
+	if err != nil {
+		t.Fatalf("detection failed: %v", err)
+	}
+
+	// Verify results
+	// Should have 3 extensions: Python (newer from Insiders), Go (from stable, disabled), Rust (from Insiders)
+	if len(extensions) != 3 {
+		t.Errorf("expected 3 extensions, got %d", len(extensions))
+	}
+
+	// Check Python - should be Insiders version
+	var pythonExt *Extension
+	for i := range extensions {
+		if extensions[i].ID == "ms-python.python" {
+			pythonExt = &extensions[i]
+			break
+		}
+	}
+	if pythonExt == nil {
+		t.Fatal("Python extension not found")
+	}
+	if pythonExt.Version != "2024.1.0" {
+		t.Errorf("expected Python v2024.1.0, got v%s", pythonExt.Version)
+	}
+	if pythonExt.DisplayName != "Python Insiders" {
+		t.Errorf("expected DisplayName 'Python Insiders', got '%s'", pythonExt.DisplayName)
+	}
+	if !pythonExt.Enabled {
+		t.Error("expected Python to be enabled")
+	}
+
+	// Check Go - should be stable version and disabled
+	var goExt *Extension
+	for i := range extensions {
+		if extensions[i].ID == "golang.go" {
+			goExt = &extensions[i]
+			break
+		}
+	}
+	if goExt == nil {
+		t.Fatal("Go extension not found")
+	}
+	if goExt.Version != "0.39.0" {
+		t.Errorf("expected Go v0.39.0, got v%s", goExt.Version)
+	}
+	if goExt.Enabled {
+		t.Error("expected Go to be disabled")
+	}
+
+	// Check Rust - should be from Insiders and enabled
+	var rustExt *Extension
+	for i := range extensions {
+		if extensions[i].ID == "rust-lang.rust" {
+			rustExt = &extensions[i]
+			break
+		}
+	}
+	if rustExt == nil {
+		t.Fatal("Rust extension not found")
+	}
+	if rustExt.Version != "1.0.0" {
+		t.Errorf("expected Rust v1.0.0, got v%s", rustExt.Version)
+	}
+	if !rustExt.Enabled {
+		t.Error("expected Rust to be enabled")
+	}
+}
+
 // Helper function to check if VS Code CLI is available
 func isVSCodeInstalled() bool {
 	_, err := exec.LookPath("code")
