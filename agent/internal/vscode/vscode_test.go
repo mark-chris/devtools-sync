@@ -735,11 +735,15 @@ func TestListExtensionsWithFallback(t *testing.T) {
 	// Save original PATH
 	originalPath := os.Getenv("PATH")
 	defer func() {
-		os.Setenv("PATH", originalPath)
+		if err := os.Setenv("PATH", originalPath); err != nil {
+			t.Errorf("failed to restore PATH: %v", err)
+		}
 	}()
 
 	// Set PATH to empty to make 'code' unavailable
-	os.Setenv("PATH", "")
+	if err := os.Setenv("PATH", ""); err != nil {
+		t.Fatalf("failed to set PATH: %v", err)
+	}
 
 	// Create a temporary extension directory
 	tmpDir := t.TempDir()
@@ -802,11 +806,15 @@ func TestListExtensionsWithFallbackAndState(t *testing.T) {
 	// Save original PATH
 	originalPath := os.Getenv("PATH")
 	defer func() {
-		os.Setenv("PATH", originalPath)
+		if err := os.Setenv("PATH", originalPath); err != nil {
+			t.Errorf("failed to restore PATH: %v", err)
+		}
 	}()
 
 	// Set PATH to empty to make 'code' unavailable
-	os.Setenv("PATH", "")
+	if err := os.Setenv("PATH", ""); err != nil {
+		t.Fatalf("failed to set PATH: %v", err)
+	}
 
 	// Create temporary directories
 	tmpDir := t.TempDir()
