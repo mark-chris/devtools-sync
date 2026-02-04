@@ -737,3 +737,86 @@ func TestDiff_InvalidProfile(t *testing.T) {
 		t.Errorf("expected error to contain 'must be in format', got: %s", err.Error())
 	}
 }
+
+func TestIntegration_SaveDiffLoad(t *testing.T) {
+	// Skip if VS Code not available
+	_, err := vscode.ListExtensions()
+	if err != nil {
+		t.Skip("Skipping integration test: VS Code not available")
+	}
+
+	// Create temporary directory
+	tempDir := t.TempDir()
+
+	// Step 1: Save current profile
+	profileName := "integration-test"
+	savedProfile, err := Save(profileName, tempDir)
+	if err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	// Verify profile was saved
+	if savedProfile.Name != profileName {
+		t.Errorf("expected profile name '%s', got '%s'", profileName, savedProfile.Name)
+	}
+	if len(savedProfile.Extensions) == 0 {
+		t.Log("Warning: No extensions found. Test may not be comprehensive.")
+	}
+
+	// Step 2: Diff profile (all extensions should be already installed)
+	diffResult, err := Diff(profileName, tempDir)
+	if err != nil {
+		t.Fatalf("Diff failed: %v", err)
+	}
+
+	// All extensions should be already installed (since we just saved current state)
+	if len(diffResult.ToInstall) != 0 {
+		t.Errorf("expected 0 extensions to install, got %d", len(diffResult.ToInstall))
+	}
+	if len(diffResult.AlreadyInstalled) != len(savedProfile.Extensions) {
+		t.Errorf("expected %d already installed, got %d", len(savedProfile.Extensions), len(diffResult.AlreadyInstalled))
+	}
+
+	// Step 3: Load profile (should skip all extensions)
+	loadedProfile, err := Load(profileName, tempDir)
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	// Verify loaded profile matches saved profile
+	if loadedProfile.Name != savedProfile.Name {
+		t.Errorf("expected profile name '%s', got '%s'", savedProfile.Name, loadedProfile.Name)
+	}
+	if len(loadedProfile.Extensions) != len(savedProfile.Extensions) {
+		t.Errorf("expected %d extensions, got %d", len(savedProfile.Extensions), len(loadedProfile.Extensions))
+	}
+
+	// Step 4: Get profile
+	retrievedProfile, err := Get(profileName, tempDir)
+	if err != nil {
+		t.Fatalf("Get failed: %v", err)
+	}
+
+	// Verify retrieved profile matches saved profile
+	if retrievedProfile.Name != savedProfile.Name {
+		t.Errorf("expected profile name '%s', got '%s'", savedProfile.Name, retrievedProfile.Name)
+	}
+
+	// Step 5: List profiles
+	profiles, err := List(tempDir)
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+
+	// Verify our profile is in the list
+	found := false
+	for _, p := range profiles {
+		if p.Name == profileName {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected to find profile '%s' in list", profileName)
+	}
+}
