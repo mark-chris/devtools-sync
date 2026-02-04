@@ -4,8 +4,11 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/mark-chris/devtools-sync/agent/internal/vscode"
 )
 
 func TestSave(t *testing.T) {
@@ -274,5 +277,634 @@ func TestProfile_JSONMarshaling(t *testing.T) {
 	}
 	if len(decoded.Extensions) != len(profile.Extensions) {
 		t.Errorf("extensions count mismatch: expected %d, got %d", len(profile.Extensions), len(decoded.Extensions))
+	}
+}
+
+func TestValidate_ValidProfile(t *testing.T) {
+	profile := &Profile{
+		Name:       "my-profile",
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+		Extensions: []Extension{},
+	}
+
+	err := Validate(profile)
+	if err != nil {
+		t.Errorf("expected no error for valid profile, got: %v", err)
+	}
+}
+
+func TestValidate_EmptyName(t *testing.T) {
+	profile := &Profile{
+		Name:       "",
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+		Extensions: []Extension{},
+	}
+
+	err := Validate(profile)
+	if err == nil {
+		t.Error("expected error for empty profile name, got nil")
+	}
+
+	expectedMsg := "profile name cannot be empty"
+	if err != nil && err.Error() != expectedMsg {
+		t.Errorf("expected error message '%s', got '%s'", expectedMsg, err.Error())
+	}
+}
+
+func TestValidate_InvalidFilename(t *testing.T) {
+	invalidChars := []string{"/", "\\", ":", "*", "?", "\"", "<", ">", "|"}
+
+	for _, char := range invalidChars {
+		t.Run("char_"+char, func(t *testing.T) {
+			profile := &Profile{
+				Name:       "invalid" + char + "name",
+				CreatedAt:  time.Now(),
+				UpdatedAt:  time.Now(),
+				Extensions: []Extension{},
+			}
+
+			err := Validate(profile)
+			if err == nil {
+				t.Errorf("expected error for profile name with '%s', got nil", char)
+			}
+
+			expectedMsg := "profile name contains invalid characters"
+			if err != nil && err.Error() != expectedMsg {
+				t.Errorf("expected error message '%s', got '%s'", expectedMsg, err.Error())
+			}
+		})
+	}
+}
+
+func TestValidate_ValidExtensions(t *testing.T) {
+	profile := &Profile{
+		Name:      "test-profile",
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		Extensions: []Extension{
+			{ID: "ms-python.python", Version: "1.0.0", Enabled: true},
+			{ID: "golang.go", Version: "2.0.0", Enabled: true},
+		},
+	}
+
+	err := Validate(profile)
+	if err != nil {
+		t.Errorf("expected no error for valid extensions, got: %v", err)
+	}
+}
+
+func TestValidate_InvalidExtensionID(t *testing.T) {
+	tests := []struct {
+		name        string
+		extensionID string
+		expectedErr string
+	}{
+		{
+			name:        "empty ID",
+			extensionID: "",
+			expectedErr: "extension ID cannot be empty",
+		},
+		{
+			name:        "no dot",
+			extensionID: "nodot",
+			expectedErr: "extension ID 'nodot' must be in format 'publisher.name'",
+		},
+		{
+			name:        "multiple dots",
+			extensionID: "too.many.dots",
+			expectedErr: "extension ID 'too.many.dots' must be in format 'publisher.name'",
+		},
+		{
+			name:        "with space",
+			extensionID: "has space.name",
+			expectedErr: "extension ID 'has space.name' must be in format 'publisher.name'",
+		},
+		{
+			name:        "trailing dot",
+			extensionID: "publisher.",
+			expectedErr: "extension ID 'publisher.' must be in format 'publisher.name'",
+		},
+		{
+			name:        "leading dot",
+			extensionID: ".name",
+			expectedErr: "extension ID '.name' must be in format 'publisher.name'",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			profile := &Profile{
+				Name:      "test-profile",
+				CreatedAt: time.Now(),
+				UpdatedAt: time.Now(),
+				Extensions: []Extension{
+					{ID: tt.extensionID, Version: "1.0.0", Enabled: true},
+				},
+			}
+
+			err := Validate(profile)
+			if err == nil {
+				t.Errorf("expected error for %s, got nil", tt.name)
+			}
+
+			if err != nil && err.Error() != tt.expectedErr {
+				t.Errorf("expected error '%s', got '%s'", tt.expectedErr, err.Error())
+			}
+		})
+	}
+}
+
+func TestValidate_EmptyExtensionsList(t *testing.T) {
+	profile := &Profile{
+		Name:       "test-profile",
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+		Extensions: []Extension{},
+	}
+
+	err := Validate(profile)
+	if err != nil {
+		t.Errorf("expected no error for empty extensions list, got: %v", err)
+	}
+}
+
+func TestLoad_InvalidProfile(t *testing.T) {
+	// Create temporary directory
+	tempDir := t.TempDir()
+
+	// Create invalid profile with bad extension ID
+	profile := Profile{
+		Name:      "invalid-profile",
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		Extensions: []Extension{
+			{ID: "invalid-no-dot", Version: "1.0.0", Enabled: true},
+		},
+	}
+
+	// Write invalid profile to file
+	data, err := json.MarshalIndent(profile, "", "  ")
+	if err != nil {
+		t.Fatalf("failed to marshal profile: %v", err)
+	}
+
+	profilePath := filepath.Join(tempDir, "invalid-profile.json")
+	if err := os.WriteFile(profilePath, data, 0644); err != nil {
+		t.Fatalf("failed to write profile file: %v", err)
+	}
+
+	// Try to load the invalid profile
+	_, err = Load("invalid-profile", tempDir)
+
+	// Should return an error
+	if err == nil {
+		t.Error("expected error loading invalid profile, got nil")
+	}
+
+	// Error should mention the invalid format
+	if err != nil && !strings.Contains(err.Error(), "must be in format 'publisher.name'") {
+		t.Errorf("expected error to contain \"must be in format 'publisher.name'\", got: %s", err.Error())
+	}
+}
+
+func TestDetectConflicts_NoConflicts(t *testing.T) {
+	// All extensions are new (none installed)
+	profileExtensions := []Extension{
+		{ID: "ms-python.python", Version: "1.0.0", Enabled: true},
+		{ID: "golang.go", Version: "2.0.0", Enabled: true},
+	}
+
+	installedExtensions := []vscode.Extension{} // No installed extensions
+
+	toInstall, alreadyInstalled := detectConflicts(profileExtensions, installedExtensions)
+
+	// All should be toInstall
+	if len(toInstall) != 2 {
+		t.Errorf("expected 2 extensions to install, got %d", len(toInstall))
+	}
+	if len(alreadyInstalled) != 0 {
+		t.Errorf("expected 0 already installed extensions, got %d", len(alreadyInstalled))
+	}
+
+	// Verify IDs are correct
+	if toInstall[0].ID != "ms-python.python" || toInstall[1].ID != "golang.go" {
+		t.Errorf("toInstall has incorrect extension IDs")
+	}
+}
+
+func TestDetectConflicts_AllInstalled(t *testing.T) {
+	// All extensions already exist
+	profileExtensions := []Extension{
+		{ID: "ms-python.python", Version: "1.0.0", Enabled: true},
+		{ID: "golang.go", Version: "2.0.0", Enabled: true},
+	}
+
+	installedExtensions := []vscode.Extension{
+		{ID: "ms-python.python", Version: "1.5.0", Enabled: true},
+		{ID: "golang.go", Version: "2.1.0", Enabled: true},
+	}
+
+	toInstall, alreadyInstalled := detectConflicts(profileExtensions, installedExtensions)
+
+	// All should be alreadyInstalled
+	if len(toInstall) != 0 {
+		t.Errorf("expected 0 extensions to install, got %d", len(toInstall))
+	}
+	if len(alreadyInstalled) != 2 {
+		t.Errorf("expected 2 already installed extensions, got %d", len(alreadyInstalled))
+	}
+
+	// Verify IDs are correct
+	if alreadyInstalled[0].ID != "ms-python.python" || alreadyInstalled[1].ID != "golang.go" {
+		t.Errorf("alreadyInstalled has incorrect extension IDs")
+	}
+}
+
+func TestDetectConflicts_Mixed(t *testing.T) {
+	// Some new, some existing
+	profileExtensions := []Extension{
+		{ID: "ms-python.python", Version: "1.0.0", Enabled: true},
+		{ID: "golang.go", Version: "2.0.0", Enabled: true},
+		{ID: "rust-lang.rust", Version: "0.7.8", Enabled: true},
+	}
+
+	installedExtensions := []vscode.Extension{
+		{ID: "ms-python.python", Version: "1.5.0", Enabled: true},
+		{ID: "other.extension", Version: "1.0.0", Enabled: true},
+	}
+
+	toInstall, alreadyInstalled := detectConflicts(profileExtensions, installedExtensions)
+
+	// 2 to install (golang.go, rust-lang.rust), 1 already installed (ms-python.python)
+	if len(toInstall) != 2 {
+		t.Errorf("expected 2 extensions to install, got %d", len(toInstall))
+	}
+	if len(alreadyInstalled) != 1 {
+		t.Errorf("expected 1 already installed extension, got %d", len(alreadyInstalled))
+	}
+
+	// Verify correct categorization
+	if alreadyInstalled[0].ID != "ms-python.python" {
+		t.Errorf("expected ms-python.python to be already installed, got %s", alreadyInstalled[0].ID)
+	}
+
+	// toInstall should contain golang.go and rust-lang.rust
+	toInstallIDs := map[string]bool{
+		toInstall[0].ID: true,
+		toInstall[1].ID: true,
+	}
+	if !toInstallIDs["golang.go"] || !toInstallIDs["rust-lang.rust"] {
+		t.Errorf("toInstall should contain golang.go and rust-lang.rust")
+	}
+}
+
+func TestDetectConflicts_EmptyProfile(t *testing.T) {
+	// Empty extensions list
+	profileExtensions := []Extension{}
+
+	installedExtensions := []vscode.Extension{
+		{ID: "ms-python.python", Version: "1.5.0", Enabled: true},
+	}
+
+	toInstall, alreadyInstalled := detectConflicts(profileExtensions, installedExtensions)
+
+	// Both should be empty
+	if len(toInstall) != 0 {
+		t.Errorf("expected 0 extensions to install, got %d", len(toInstall))
+	}
+	if len(alreadyInstalled) != 0 {
+		t.Errorf("expected 0 already installed extensions, got %d", len(alreadyInstalled))
+	}
+}
+
+func TestLoad_SkipsAlreadyInstalled(t *testing.T) {
+	// Create temporary directory
+	tempDir := t.TempDir()
+
+	// Write valid profile JSON with ms-python.python@2024.0.0
+	profile := Profile{
+		Name:      "test-skip-profile",
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		Extensions: []Extension{
+			{ID: "ms-python.python", Version: "2024.0.0", Enabled: true},
+		},
+	}
+
+	data, err := json.MarshalIndent(profile, "", "  ")
+	if err != nil {
+		t.Fatalf("failed to marshal profile: %v", err)
+	}
+
+	profilePath := filepath.Join(tempDir, "test-skip-profile.json")
+	if err := os.WriteFile(profilePath, data, 0644); err != nil {
+		t.Fatalf("failed to write profile file: %v", err)
+	}
+
+	// Call Load() - will try to install (may fail if VS Code not available, that's OK)
+	loadedProfile, err := Load("test-skip-profile", tempDir)
+
+	// Test verifies profile loads and validation passed
+	if err != nil {
+		// Error is acceptable if it's "failed to install extension" (VS Code not available)
+		if strings.Contains(err.Error(), "failed to install extension") {
+			t.Logf("Load failed as expected without VS Code: %v", err)
+			return
+		}
+		t.Fatalf("Load failed with unexpected error: %v", err)
+	}
+
+	// If no error, verify the profile loaded correctly
+	if loadedProfile.Name != "test-skip-profile" {
+		t.Errorf("expected profile name 'test-skip-profile', got '%s'", loadedProfile.Name)
+	}
+	if len(loadedProfile.Extensions) != 1 {
+		t.Errorf("expected 1 extension, got %d", len(loadedProfile.Extensions))
+	}
+}
+
+func TestDiff_ValidProfile(t *testing.T) {
+	// Create temporary directory
+	tempDir := t.TempDir()
+
+	// Create profile with 2 extensions
+	profile := Profile{
+		Name:      "diff-test",
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		Extensions: []Extension{
+			{ID: "ms-python.python", Version: "1.0.0", Enabled: true},
+			{ID: "golang.go", Version: "2.0.0", Enabled: true},
+		},
+	}
+
+	// Write profile to file
+	data, err := json.MarshalIndent(profile, "", "  ")
+	if err != nil {
+		t.Fatalf("failed to marshal profile: %v", err)
+	}
+
+	profilePath := filepath.Join(tempDir, "diff-test.json")
+	if err := os.WriteFile(profilePath, data, 0644); err != nil {
+		t.Fatalf("failed to write profile file: %v", err)
+	}
+
+	// Call Diff
+	result, err := Diff("diff-test", tempDir)
+
+	// May fail if VS Code not available, that's acceptable
+	if err != nil {
+		if strings.Contains(err.Error(), "failed to list installed extensions") {
+			t.Logf("Diff failed as expected without VS Code: %v", err)
+			return
+		}
+		t.Fatalf("Diff failed with unexpected error: %v", err)
+	}
+
+	// Verify result structure
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if result.ProfileName != "diff-test" {
+		t.Errorf("expected profile name 'diff-test', got '%s'", result.ProfileName)
+	}
+	if result.TotalInProfile != 2 {
+		t.Errorf("expected TotalInProfile 2, got %d", result.TotalInProfile)
+	}
+
+	// ToInstall + AlreadyInstalled should equal TotalInProfile
+	total := len(result.ToInstall) + len(result.AlreadyInstalled)
+	if total != result.TotalInProfile {
+		t.Errorf("expected ToInstall + AlreadyInstalled = %d, got %d", result.TotalInProfile, total)
+	}
+}
+
+func TestDiff_ProfileNotFound(t *testing.T) {
+	// Create temporary directory
+	tempDir := t.TempDir()
+
+	// Call Diff with nonexistent profile
+	_, err := Diff("nonexistent", tempDir)
+
+	// Should return error
+	if err == nil {
+		t.Error("expected error for nonexistent profile, got nil")
+	}
+
+	// Error should contain "not found"
+	if err != nil && !strings.Contains(err.Error(), "not found") {
+		t.Errorf("expected error to contain 'not found', got: %s", err.Error())
+	}
+}
+
+func TestDiff_InvalidProfile(t *testing.T) {
+	// Create temporary directory
+	tempDir := t.TempDir()
+
+	// Create profile with bad extension ID
+	profile := Profile{
+		Name:      "invalid-diff",
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		Extensions: []Extension{
+			{ID: "bad-extension-id", Version: "1.0.0", Enabled: true},
+		},
+	}
+
+	// Write profile to file
+	data, err := json.MarshalIndent(profile, "", "  ")
+	if err != nil {
+		t.Fatalf("failed to marshal profile: %v", err)
+	}
+
+	profilePath := filepath.Join(tempDir, "invalid-diff.json")
+	if err := os.WriteFile(profilePath, data, 0644); err != nil {
+		t.Fatalf("failed to write profile file: %v", err)
+	}
+
+	// Call Diff
+	_, err = Diff("invalid-diff", tempDir)
+
+	// Should return validation error
+	if err == nil {
+		t.Error("expected validation error, got nil")
+	}
+
+	// Error should mention format requirement
+	if err != nil && !strings.Contains(err.Error(), "must be in format") {
+		t.Errorf("expected error to contain 'must be in format', got: %s", err.Error())
+	}
+}
+
+func TestIntegration_SaveDiffLoad(t *testing.T) {
+	// Skip if VS Code not available
+	_, err := vscode.ListExtensions()
+	if err != nil {
+		t.Skip("Skipping integration test: VS Code not available")
+	}
+
+	// Create temporary directory
+	tempDir := t.TempDir()
+
+	// Step 1: Save current profile
+	profileName := "integration-test"
+	savedProfile, err := Save(profileName, tempDir)
+	if err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	// Verify profile was saved
+	if savedProfile.Name != profileName {
+		t.Errorf("expected profile name '%s', got '%s'", profileName, savedProfile.Name)
+	}
+	if len(savedProfile.Extensions) == 0 {
+		t.Log("Warning: No extensions found. Test may not be comprehensive.")
+	}
+
+	// Step 2: Diff profile (all extensions should be already installed)
+	diffResult, err := Diff(profileName, tempDir)
+	if err != nil {
+		t.Fatalf("Diff failed: %v", err)
+	}
+
+	// All extensions should be already installed (since we just saved current state)
+	if len(diffResult.ToInstall) != 0 {
+		t.Errorf("expected 0 extensions to install, got %d", len(diffResult.ToInstall))
+	}
+	if len(diffResult.AlreadyInstalled) != len(savedProfile.Extensions) {
+		t.Errorf("expected %d already installed, got %d", len(savedProfile.Extensions), len(diffResult.AlreadyInstalled))
+	}
+
+	// Step 3: Load profile (should skip all extensions)
+	loadedProfile, err := Load(profileName, tempDir)
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	// Verify loaded profile matches saved profile
+	if loadedProfile.Name != savedProfile.Name {
+		t.Errorf("expected profile name '%s', got '%s'", savedProfile.Name, loadedProfile.Name)
+	}
+	if len(loadedProfile.Extensions) != len(savedProfile.Extensions) {
+		t.Errorf("expected %d extensions, got %d", len(savedProfile.Extensions), len(loadedProfile.Extensions))
+	}
+
+	// Step 4: Get profile
+	retrievedProfile, err := Get(profileName, tempDir)
+	if err != nil {
+		t.Fatalf("Get failed: %v", err)
+	}
+
+	// Verify retrieved profile matches saved profile
+	if retrievedProfile.Name != savedProfile.Name {
+		t.Errorf("expected profile name '%s', got '%s'", savedProfile.Name, retrievedProfile.Name)
+	}
+
+	// Step 5: List profiles
+	profiles, err := List(tempDir)
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+
+	// Verify our profile is in the list
+	found := false
+	for _, p := range profiles {
+		if p.Name == profileName {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected to find profile '%s' in list", profileName)
+	}
+}
+
+func TestBackwardCompatibility_OldProfiles(t *testing.T) {
+	// Create temporary directory
+	tempDir := t.TempDir()
+
+	// Create an old-format profile (before validation was added)
+	// This simulates a profile created by an older version
+	oldProfile := Profile{
+		Name:      "old-profile",
+		CreatedAt: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+		UpdatedAt: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+		Extensions: []Extension{
+			{ID: "ms-python.python", Version: "2023.1.0", Enabled: true},
+			{ID: "golang.go", Version: "0.38.0", Enabled: true},
+		},
+	}
+
+	// Write old profile directly to file (bypassing Save function)
+	data, err := json.MarshalIndent(oldProfile, "", "  ")
+	if err != nil {
+		t.Fatalf("failed to marshal old profile: %v", err)
+	}
+
+	profilePath := filepath.Join(tempDir, "old-profile.json")
+	if err := os.WriteFile(profilePath, data, 0644); err != nil {
+		t.Fatalf("failed to write old profile file: %v", err)
+	}
+
+	// Test 1: Get should work with old profile
+	retrieved, err := Get("old-profile", tempDir)
+	if err != nil {
+		t.Fatalf("Get failed on old profile: %v", err)
+	}
+	if retrieved.Name != "old-profile" {
+		t.Errorf("expected profile name 'old-profile', got '%s'", retrieved.Name)
+	}
+	if len(retrieved.Extensions) != 2 {
+		t.Errorf("expected 2 extensions, got %d", len(retrieved.Extensions))
+	}
+
+	// Test 2: Validate should work with old profile
+	err = Validate(retrieved)
+	if err != nil {
+		t.Errorf("Validate failed on old profile: %v", err)
+	}
+
+	// Test 3: Diff should work with old profile
+	diffResult, err := Diff("old-profile", tempDir)
+	if err != nil {
+		// May fail if VS Code not available, that's acceptable
+		if strings.Contains(err.Error(), "failed to list installed extensions") {
+			t.Logf("Diff skipped: VS Code not available")
+			return
+		}
+		t.Fatalf("Diff failed on old profile: %v", err)
+	}
+
+	// Verify diff result structure is correct
+	if diffResult.ProfileName != "old-profile" {
+		t.Errorf("expected profile name 'old-profile', got '%s'", diffResult.ProfileName)
+	}
+	if diffResult.TotalInProfile != 2 {
+		t.Errorf("expected TotalInProfile 2, got %d", diffResult.TotalInProfile)
+	}
+
+	// ToInstall + AlreadyInstalled should equal TotalInProfile
+	total := len(diffResult.ToInstall) + len(diffResult.AlreadyInstalled)
+	if total != diffResult.TotalInProfile {
+		t.Errorf("expected ToInstall + AlreadyInstalled = %d, got %d", diffResult.TotalInProfile, total)
+	}
+
+	// Test 4: List should include old profile
+	profiles, err := List(tempDir)
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+
+	found := false
+	for _, p := range profiles {
+		if p.Name == "old-profile" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected to find 'old-profile' in list")
 	}
 }

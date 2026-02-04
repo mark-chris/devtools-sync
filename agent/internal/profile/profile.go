@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/mark-chris/devtools-sync/agent/internal/vscode"
@@ -23,6 +24,126 @@ type Profile struct {
 	CreatedAt  time.Time   `json:"created_at"`
 	UpdatedAt  time.Time   `json:"updated_at"`
 	Extensions []Extension `json:"extensions"`
+}
+
+// Validate checks if the profile has valid data
+func Validate(profile *Profile) error {
+	// Check profile name
+	if profile.Name == "" {
+		return fmt.Errorf("profile name cannot be empty")
+	}
+
+	// Check for invalid filename characters
+	invalidChars := []string{"/", "\\", ":", "*", "?", "\"", "<", ">", "|"}
+	for _, char := range invalidChars {
+		if strings.Contains(profile.Name, char) {
+			return fmt.Errorf("profile name contains invalid characters")
+		}
+	}
+
+	// Check extension IDs
+	for _, ext := range profile.Extensions {
+		// Check if extension ID is empty
+		if ext.ID == "" {
+			return fmt.Errorf("extension ID cannot be empty")
+		}
+
+		// Check if extension ID contains spaces
+		if strings.Contains(ext.ID, " ") {
+			return fmt.Errorf("extension ID '%s' must be in format 'publisher.name'", ext.ID)
+		}
+
+		// Split by dot to check format
+		parts := strings.Split(ext.ID, ".")
+
+		// Must have exactly 2 parts (publisher.name)
+		if len(parts) != 2 {
+			return fmt.Errorf("extension ID '%s' must be in format 'publisher.name'", ext.ID)
+		}
+
+		// Both parts must be non-empty
+		if parts[0] == "" || parts[1] == "" {
+			return fmt.Errorf("extension ID '%s' must be in format 'publisher.name'", ext.ID)
+		}
+	}
+
+	return nil
+}
+
+// detectConflicts compares profile extensions with currently installed extensions
+// Returns two lists: extensions to install and extensions already installed
+func detectConflicts(profileExtensions []Extension, installedExtensions []vscode.Extension) (toInstall, alreadyInstalled []Extension) {
+	// Create map of installed extension IDs for O(1) lookup
+	installedMap := make(map[string]bool)
+	for _, ext := range installedExtensions {
+		installedMap[ext.ID] = true
+	}
+
+	// Categorize each profile extension
+	for _, ext := range profileExtensions {
+		if installedMap[ext.ID] {
+			alreadyInstalled = append(alreadyInstalled, ext)
+		} else {
+			toInstall = append(toInstall, ext)
+		}
+	}
+
+	return toInstall, alreadyInstalled
+}
+
+// DiffResult contains the comparison between a profile and installed extensions
+type DiffResult struct {
+	ProfileName      string
+	ToInstall        []Extension
+	AlreadyInstalled []Extension
+	TotalInProfile   int
+}
+
+// Diff compares a profile with currently installed extensions
+func Diff(profileName string, profilesDir string) (*DiffResult, error) {
+	if profileName == "" {
+		return nil, fmt.Errorf("profile name cannot be empty")
+	}
+
+	// Read profile file
+	profilePath := filepath.Join(profilesDir, profileName+".json")
+	data, err := os.ReadFile(profilePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("profile '%s' not found", profileName)
+		}
+		return nil, fmt.Errorf("failed to read profile file: %w", err)
+	}
+
+	// Parse profile
+	var profile Profile
+	if err := json.Unmarshal(data, &profile); err != nil {
+		return nil, fmt.Errorf("failed to parse profile file: %w", err)
+	}
+
+	// Validate profile
+	if err := Validate(&profile); err != nil {
+		return nil, fmt.Errorf("invalid profile: %w", err)
+	}
+
+	// Get currently installed extensions
+	installedExts, err := vscode.ListExtensions()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list installed extensions: %w", err)
+	}
+
+	// Detect conflicts
+	toInstall, alreadyInstalled := detectConflicts(profile.Extensions, installedExts)
+
+	// Build result
+	result := &DiffResult{
+		ProfileName:      profile.Name,
+		ToInstall:        toInstall,
+		AlreadyInstalled: alreadyInstalled,
+		TotalInProfile:   len(profile.Extensions),
+	}
+
+	return result, nil
 }
 
 // Save captures current VS Code extensions to a profile
@@ -110,12 +231,40 @@ func Load(name string, profilesDir string) (*Profile, error) {
 		return nil, fmt.Errorf("failed to parse profile file: %w", err)
 	}
 
-	// Install each extension
-	for _, ext := range profile.Extensions {
+	// Validate profile before attempting installation
+	if err := Validate(&profile); err != nil {
+		return nil, fmt.Errorf("invalid profile: %w", err)
+	}
+
+	// Get installed extensions
+	installedExts, err := vscode.ListExtensions()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list installed extensions: %w", err)
+	}
+
+	// Detect conflicts
+	toInstall, alreadyInstalled := detectConflicts(profile.Extensions, installedExts)
+
+	// Report skipped extensions (if any)
+	if len(alreadyInstalled) > 0 {
+		fmt.Printf("Skipping %d already installed extension(s):\n", len(alreadyInstalled))
+		for _, ext := range alreadyInstalled {
+			fmt.Printf("  - %s (already installed)\n", ext.ID)
+		}
+	}
+
+	// Install only new extensions
+	for _, ext := range toInstall {
 		if err := vscode.InstallExtension(ext.ID); err != nil {
 			return nil, fmt.Errorf("failed to install extension %s: %w", ext.ID, err)
 		}
 	}
+
+	// Report summary after installation
+	fmt.Printf("\nProfile '%s' loaded successfully:\n", profile.Name)
+	fmt.Printf("  - Installed: %d extension(s)\n", len(toInstall))
+	fmt.Printf("  - Skipped: %d extension(s)\n", len(alreadyInstalled))
+	fmt.Printf("  - Total: %d extension(s)\n", len(profile.Extensions))
 
 	return &profile, nil
 }
