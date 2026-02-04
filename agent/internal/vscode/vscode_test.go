@@ -378,6 +378,73 @@ func TestScanExtensionDirNonexistent(t *testing.T) {
 	}
 }
 
+func TestCompareVersions(t *testing.T) {
+	tests := []struct {
+		name string
+		v1   string
+		v2   string
+		want int
+	}{
+		{
+			name: "v1 greater than v2",
+			v1:   "2.0.0",
+			v2:   "1.0.0",
+			want: 1,
+		},
+		{
+			name: "v1 less than v2",
+			v1:   "1.0.0",
+			v2:   "2.0.0",
+			want: -1,
+		},
+		{
+			name: "v1 equals v2",
+			v1:   "1.0.0",
+			v2:   "1.0.0",
+			want: 0,
+		},
+		{
+			name: "patch version difference",
+			v1:   "1.0.1",
+			v2:   "1.0.0",
+			want: 1,
+		},
+		{
+			name: "minor version difference",
+			v1:   "1.1.0",
+			v2:   "1.2.0",
+			want: -1,
+		},
+		{
+			name: "pre-release version",
+			v1:   "1.0.0-alpha",
+			v2:   "1.0.0",
+			want: -1,
+		},
+		{
+			name: "versions with v prefix",
+			v1:   "v1.2.3",
+			v2:   "v1.2.4",
+			want: -1,
+		},
+		{
+			name: "mixed prefix formats",
+			v1:   "1.0.0",
+			v2:   "v1.0.0",
+			want: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := compareVersions(tt.v1, tt.v2)
+			if got != tt.want {
+				t.Errorf("compareVersions(%q, %q) = %d, want %d", tt.v1, tt.v2, got, tt.want)
+			}
+		})
+	}
+}
+
 // Helper function to check if VS Code CLI is available
 func isVSCodeInstalled() bool {
 	_, err := exec.LookPath("code")

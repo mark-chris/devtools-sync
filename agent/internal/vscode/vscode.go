@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"golang.org/x/mod/semver"
 )
 
 // Extension represents a VS Code extension
@@ -185,6 +187,21 @@ func parseManifest(data []byte, dirName string) (Extension, error) {
 		Description: manifest.Description,
 		Publisher:   manifest.Publisher,
 	}, nil
+}
+
+// compareVersions compares two semantic version strings.
+// Returns -1 if v1 < v2, 0 if v1 == v2, 1 if v1 > v2.
+// Version strings are normalized to include 'v' prefix for semver package.
+func compareVersions(v1, v2 string) int {
+	// Ensure versions have 'v' prefix for semver package
+	if !strings.HasPrefix(v1, "v") {
+		v1 = "v" + v1
+	}
+	if !strings.HasPrefix(v2, "v") {
+		v2 = "v" + v2
+	}
+
+	return semver.Compare(v1, v2)
 }
 
 // scanExtensionDir scans a directory for installed extensions
