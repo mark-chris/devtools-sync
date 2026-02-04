@@ -1,20 +1,37 @@
 package vscode
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
+
+	"golang.org/x/mod/semver"
 )
 
 // Extension represents a VS Code extension
 type Extension struct {
-	ID      string
-	Version string
-	Enabled bool
+	ID          string
+	Version     string
+	Enabled     bool
+	DisplayName string
+	Description string
+	Publisher   string
+}
+
+// packageManifest represents the structure of a package.json file
+type packageManifest struct {
+	Name        string `json:"name"`
+	Version     string `json:"version"`
+	Publisher   string `json:"publisher"`
+	DisplayName string `json:"displayName"`
+	Description string `json:"description"`
 }
 
 // DetectInstallation checks if VS Code is installed on the system
@@ -31,8 +48,21 @@ func DetectInstallation() (bool, error) {
 }
 
 // ListExtensions returns a list of installed VS Code extensions
+// Tries CLI first, falls back to directory parsing with state detection on failure
 func ListExtensions() ([]Extension, error) {
-	// Execute code --list-extensions --show-versions
+	// Try CLI method first
+	extensions, err := listExtensionsViaCLI()
+	if err == nil {
+		return extensions, nil
+	}
+
+	// CLI failed, log and fall back to directory parsing with state detection
+	log.Printf("CLI method failed (%v), falling back to directory parsing", err)
+	return listExtensionsFromDirsWithState(getExtensionDirs(), getStatePaths())
+}
+
+// listExtensionsViaCLI lists extensions using the VS Code CLI
+func listExtensionsViaCLI() ([]Extension, error) {
 	cmd := exec.Command("code", "--list-extensions", "--show-versions")
 	output, err := cmd.Output()
 	if err != nil {
@@ -112,4 +142,316 @@ func getVSCodePaths() []string {
 	default:
 		return []string{}
 	}
+}
+
+// Variable to allow overriding in tests
+var getExtensionDirs = getExtensionDirsImpl
+
+// getExtensionDirsImpl returns extension directory paths for VS Code and Insiders
+func getExtensionDirsImpl() []string {
+	home := os.Getenv("HOME")
+	if home == "" {
+		home = os.Getenv("USERPROFILE") // Windows
+	}
+
+	switch runtime.GOOS {
+	case "darwin":
+		return []string{
+			filepath.Join(home, ".vscode", "extensions"),
+			filepath.Join(home, ".vscode-insiders", "extensions"),
+		}
+	case "windows":
+		return []string{
+			filepath.Join(home, ".vscode", "extensions"),
+			filepath.Join(home, ".vscode-insiders", "extensions"),
+		}
+	case "linux":
+		return []string{
+			filepath.Join(home, ".vscode", "extensions"),
+			filepath.Join(home, ".vscode-insiders", "extensions"),
+		}
+	default:
+		return []string{}
+	}
+}
+
+// parseManifest parses a package.json file and returns an Extension
+func parseManifest(data []byte, dirName string) (Extension, error) {
+	var manifest packageManifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return Extension{}, fmt.Errorf("failed to parse package.json: %w", err)
+	}
+
+	// Validate required fields
+	if manifest.Name == "" {
+		return Extension{}, errors.New("missing required field: name")
+	}
+	if manifest.Version == "" {
+		return Extension{}, errors.New("missing required field: version")
+	}
+	if manifest.Publisher == "" {
+		return Extension{}, errors.New("missing required field: publisher")
+	}
+
+	// Build extension ID from publisher.name
+	extensionID := fmt.Sprintf("%s.%s", manifest.Publisher, manifest.Name)
+
+	return Extension{
+		ID:          extensionID,
+		Version:     manifest.Version,
+		Enabled:     true,
+		DisplayName: manifest.DisplayName,
+		Description: manifest.Description,
+		Publisher:   manifest.Publisher,
+	}, nil
+}
+
+// compareVersions compares two semantic version strings.
+// Returns -1 if v1 < v2, 0 if v1 == v2, 1 if v1 > v2.
+// Version strings are normalized to include 'v' prefix for semver package.
+func compareVersions(v1, v2 string) int {
+	// Ensure versions have 'v' prefix for semver package
+	if !strings.HasPrefix(v1, "v") {
+		v1 = "v" + v1
+	}
+	if !strings.HasPrefix(v2, "v") {
+		v2 = "v" + v2
+	}
+
+	return semver.Compare(v1, v2)
+}
+
+// scanExtensionDir scans a directory for installed extensions
+func scanExtensionDir(dir string) ([]Extension, error) {
+	// Check if directory exists
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		return []Extension{}, nil
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read extension directory: %w", err)
+	}
+
+	extensions := make([]Extension, 0)
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		// Read package.json from extension directory
+		manifestPath := filepath.Join(dir, entry.Name(), "package.json")
+		data, err := os.ReadFile(manifestPath)
+		if err != nil {
+			// Skip extensions without package.json
+			log.Printf("Warning: skipping %s - no package.json found", entry.Name())
+			continue
+		}
+
+		// Parse manifest
+		ext, err := parseManifest(data, entry.Name())
+		if err != nil {
+			// Skip extensions with invalid manifests
+			log.Printf("Warning: skipping %s - %v", entry.Name(), err)
+			continue
+		}
+
+		extensions = append(extensions, ext)
+	}
+
+	return extensions, nil
+}
+
+// mergeExtensions combines multiple sets of extensions, deduplicates by ID,
+// and keeps the highest version for each extension.
+func mergeExtensions(sets ...[]Extension) []Extension {
+	// Use map for deduplication
+	extMap := make(map[string]Extension)
+
+	for _, set := range sets {
+		for _, ext := range set {
+			if existing, found := extMap[ext.ID]; found {
+				// Extension already exists, compare versions
+				cmp := compareVersions(ext.Version, existing.Version)
+				if cmp > 0 {
+					// New version is higher
+					log.Printf("Deduplicating %s: keeping v%s over v%s", ext.ID, ext.Version, existing.Version)
+					extMap[ext.ID] = ext
+				} else if cmp < 0 {
+					// Existing version is higher
+					log.Printf("Deduplicating %s: keeping v%s over v%s", ext.ID, existing.Version, ext.Version)
+				}
+				// If equal (cmp == 0), keep existing
+			} else {
+				extMap[ext.ID] = ext
+			}
+		}
+	}
+
+	// Convert map to slice
+	result := make([]Extension, 0, len(extMap))
+	for _, ext := range extMap {
+		result = append(result, ext)
+	}
+
+	// Sort by ID for consistent output
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].ID < result[j].ID
+	})
+
+	return result
+}
+
+// listExtensionsFromDirs scans multiple directories for installed extensions
+// and merges the results, keeping the highest version of each extension.
+// Continues on errors with log.Printf warnings.
+func listExtensionsFromDirs(dirs []string) ([]Extension, error) {
+	sets := make([][]Extension, 0, len(dirs))
+
+	for _, dir := range dirs {
+		extensions, err := scanExtensionDir(dir)
+		if err != nil {
+			// Log warning but continue scanning other directories
+			log.Printf("Warning: failed to scan directory %s: %v", dir, err)
+			continue
+		}
+		if len(extensions) > 0 {
+			sets = append(sets, extensions)
+		}
+	}
+
+	// Merge all extension sets
+	merged := mergeExtensions(sets...)
+	return merged, nil
+}
+
+// getStatePaths returns storage.json paths for VS Code and Insiders on all platforms
+func getStatePaths() []string {
+	home := os.Getenv("HOME")
+	if home == "" {
+		home = os.Getenv("USERPROFILE") // Windows
+	}
+
+	var paths []string
+
+	switch runtime.GOOS {
+	case "darwin":
+		// macOS: ~/Library/Application Support/Code/User/globalStorage/storage.json
+		paths = []string{
+			filepath.Join(home, "Library", "Application Support", "Code", "User", "globalStorage", "storage.json"),
+			filepath.Join(home, "Library", "Application Support", "Code - Insiders", "User", "globalStorage", "storage.json"),
+		}
+	case "windows":
+		// Windows: %APPDATA%/Code/User/globalStorage/storage.json
+		appdata := os.Getenv("APPDATA")
+		if appdata == "" {
+			appdata = home // Fallback to home if APPDATA not set
+		}
+		paths = []string{
+			filepath.Join(appdata, "Code", "User", "globalStorage", "storage.json"),
+			filepath.Join(appdata, "Code - Insiders", "User", "globalStorage", "storage.json"),
+		}
+	case "linux":
+		// Linux: ~/.config/Code/User/globalStorage/storage.json
+		paths = []string{
+			filepath.Join(home, ".config", "Code", "User", "globalStorage", "storage.json"),
+			filepath.Join(home, ".config", "Code - Insiders", "User", "globalStorage", "storage.json"),
+		}
+	default:
+		paths = []string{}
+	}
+
+	return paths
+}
+
+// extensionIdentifier represents an extension identifier in storage.json
+type extensionIdentifier struct {
+	ID string `json:"id"`
+}
+
+// storageData represents the structure of storage.json
+type storageData struct {
+	DisabledExtensions []extensionIdentifier `json:"extensionsIdentifiers/disabled"`
+}
+
+// loadDisabledExtensions parses storage.json and extracts disabled extension IDs.
+// Returns a map for fast lookup. Handles missing files gracefully by returning
+// an empty map without error.
+func loadDisabledExtensions(statePath string) (map[string]bool, error) {
+	// Check if file exists
+	if _, err := os.Stat(statePath); os.IsNotExist(err) {
+		// File doesn't exist - return empty map, no error
+		return map[string]bool{}, nil
+	}
+
+	// Read file
+	data, err := os.ReadFile(statePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read storage.json: %w", err)
+	}
+
+	// Parse JSON
+	var storage storageData
+	if err := json.Unmarshal(data, &storage); err != nil {
+		return nil, fmt.Errorf("failed to parse storage.json: %w", err)
+	}
+
+	// Build map of disabled extensions
+	disabled := make(map[string]bool)
+	for _, ext := range storage.DisabledExtensions {
+		// Skip entries without ID (malformed data)
+		if ext.ID != "" {
+			disabled[ext.ID] = true
+		}
+	}
+
+	return disabled, nil
+}
+
+// applyEnabledState updates the Enabled field of extensions based on the disabled map.
+// Returns a new slice with updated Enabled fields. Original slice is not modified.
+func applyEnabledState(extensions []Extension, disabled map[string]bool) []Extension {
+	// Create new slice to avoid modifying input
+	result := make([]Extension, len(extensions))
+
+	for i, ext := range extensions {
+		// Copy extension
+		result[i] = ext
+		// Update enabled state based on disabled map
+		if disabled[ext.ID] {
+			result[i].Enabled = false
+		}
+	}
+
+	return result
+}
+
+// listExtensionsFromDirsWithState scans multiple directories for installed extensions,
+// loads disabled state from storage.json files, and applies the state.
+// Continues on errors with log.Printf warnings.
+func listExtensionsFromDirsWithState(extensionDirs []string, statePaths []string) ([]Extension, error) {
+	// First, get all extensions from directories
+	extensions, err := listExtensionsFromDirs(extensionDirs)
+	if err != nil {
+		return nil, err
+	}
+
+	// Load disabled extensions from all state files
+	allDisabled := make(map[string]bool)
+	for _, statePath := range statePaths {
+		disabled, err := loadDisabledExtensions(statePath)
+		if err != nil {
+			// Log warning but continue with other state files
+			log.Printf("Warning: failed to load disabled extensions from %s: %v", statePath, err)
+			continue
+		}
+		// Merge disabled extensions
+		for id := range disabled {
+			allDisabled[id] = true
+		}
+	}
+
+	// Apply enabled state
+	return applyEnabledState(extensions, allDisabled), nil
 }
