@@ -123,10 +123,77 @@ var profileListCmd = &cobra.Command{
 	},
 }
 
+var profileDiffCmd = &cobra.Command{
+	Use:               "diff <name>",
+	Short:             "Compare a profile with currently installed extensions",
+	Long:              "Show which extensions would be installed and which are already installed if loading this profile",
+	Args:              cobra.ExactArgs(1),
+	ValidArgsFunction: profileNameCompletion,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		name := args[0]
+
+		// Load config to get profiles directory
+		cfg, err := config.Load()
+		if err != nil {
+			return fmt.Errorf("failed to load config: %w", err)
+		}
+
+		// Compare profile with installed extensions
+		result, err := profile.Diff(name, cfg.Profiles.Directory)
+		if err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				// List available profiles for better UX
+				profiles, _ := profile.List(cfg.Profiles.Directory)
+				if len(profiles) > 0 {
+					names := make([]string, len(profiles))
+					for i, p := range profiles {
+						names[i] = p.Name
+					}
+					return fmt.Errorf("profile '%s' not found\n\nAvailable profiles: %s\n\nUse 'devtools-sync profile list' to see all profiles", name, strings.Join(names, ", "))
+				}
+				return fmt.Errorf("profile '%s' not found\n\nNo profiles available. Create one with:\n  devtools-sync profile save <name>", name)
+			}
+			if strings.Contains(err.Error(), "VS Code") {
+				return fmt.Errorf("failed to diff profile: %w\n\nMake sure:\n  1. VS Code is installed\n  2. The 'code' command is available in your PATH", err)
+			}
+			return fmt.Errorf("failed to diff profile '%s': %w", name, err)
+		}
+
+		// Display results in a formatted manner
+		cmd.Printf("Profile: %s\n", result.ProfileName)
+		cmd.Printf("Total extensions in profile: %d\n\n", result.TotalInProfile)
+
+		if len(result.ToInstall) > 0 {
+			cmd.Printf("To Install (%d):\n", len(result.ToInstall))
+			for _, ext := range result.ToInstall {
+				cmd.Printf("  + %s (%s)\n", ext.ID, ext.Version)
+			}
+			cmd.Printf("\n")
+		}
+
+		if len(result.AlreadyInstalled) > 0 {
+			cmd.Printf("Already Installed (%d):\n", len(result.AlreadyInstalled))
+			for _, ext := range result.AlreadyInstalled {
+				cmd.Printf("  = %s (%s)\n", ext.ID, ext.Version)
+			}
+			cmd.Printf("\n")
+		}
+
+		if len(result.ToInstall) == 0 && len(result.AlreadyInstalled) == result.TotalInProfile {
+			cmd.Printf("All extensions from this profile are already installed.\n")
+		} else if len(result.ToInstall) > 0 {
+			cmd.Printf("Run 'devtools-sync profile load %s' to install missing extensions.\n", name)
+		}
+
+		return nil
+	},
+}
+
 func init() {
 	profileCmd.AddCommand(profileSaveCmd)
 	profileCmd.AddCommand(profileLoadCmd)
 	profileCmd.AddCommand(profileListCmd)
+	profileCmd.AddCommand(profileDiffCmd)
 	rootCmd.AddCommand(profileCmd)
 }
 
