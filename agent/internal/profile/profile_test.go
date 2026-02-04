@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/mark-chris/devtools-sync/agent/internal/vscode"
 )
 
 func TestSave(t *testing.T) {
@@ -464,5 +466,115 @@ func TestLoad_InvalidProfile(t *testing.T) {
 	// Error should mention the invalid format
 	if err != nil && !strings.Contains(err.Error(), "must be in format 'publisher.name'") {
 		t.Errorf("expected error to contain \"must be in format 'publisher.name'\", got: %s", err.Error())
+	}
+}
+
+func TestDetectConflicts_NoConflicts(t *testing.T) {
+	// All extensions are new (none installed)
+	profileExtensions := []Extension{
+		{ID: "ms-python.python", Version: "1.0.0", Enabled: true},
+		{ID: "golang.go", Version: "2.0.0", Enabled: true},
+	}
+
+	installedExtensions := []vscode.Extension{} // No installed extensions
+
+	toInstall, alreadyInstalled := detectConflicts(profileExtensions, installedExtensions)
+
+	// All should be toInstall
+	if len(toInstall) != 2 {
+		t.Errorf("expected 2 extensions to install, got %d", len(toInstall))
+	}
+	if len(alreadyInstalled) != 0 {
+		t.Errorf("expected 0 already installed extensions, got %d", len(alreadyInstalled))
+	}
+
+	// Verify IDs are correct
+	if toInstall[0].ID != "ms-python.python" || toInstall[1].ID != "golang.go" {
+		t.Errorf("toInstall has incorrect extension IDs")
+	}
+}
+
+func TestDetectConflicts_AllInstalled(t *testing.T) {
+	// All extensions already exist
+	profileExtensions := []Extension{
+		{ID: "ms-python.python", Version: "1.0.0", Enabled: true},
+		{ID: "golang.go", Version: "2.0.0", Enabled: true},
+	}
+
+	installedExtensions := []vscode.Extension{
+		{ID: "ms-python.python", Version: "1.5.0", Enabled: true},
+		{ID: "golang.go", Version: "2.1.0", Enabled: true},
+	}
+
+	toInstall, alreadyInstalled := detectConflicts(profileExtensions, installedExtensions)
+
+	// All should be alreadyInstalled
+	if len(toInstall) != 0 {
+		t.Errorf("expected 0 extensions to install, got %d", len(toInstall))
+	}
+	if len(alreadyInstalled) != 2 {
+		t.Errorf("expected 2 already installed extensions, got %d", len(alreadyInstalled))
+	}
+
+	// Verify IDs are correct
+	if alreadyInstalled[0].ID != "ms-python.python" || alreadyInstalled[1].ID != "golang.go" {
+		t.Errorf("alreadyInstalled has incorrect extension IDs")
+	}
+}
+
+func TestDetectConflicts_Mixed(t *testing.T) {
+	// Some new, some existing
+	profileExtensions := []Extension{
+		{ID: "ms-python.python", Version: "1.0.0", Enabled: true},
+		{ID: "golang.go", Version: "2.0.0", Enabled: true},
+		{ID: "rust-lang.rust", Version: "0.7.8", Enabled: true},
+	}
+
+	installedExtensions := []vscode.Extension{
+		{ID: "ms-python.python", Version: "1.5.0", Enabled: true},
+		{ID: "other.extension", Version: "1.0.0", Enabled: true},
+	}
+
+	toInstall, alreadyInstalled := detectConflicts(profileExtensions, installedExtensions)
+
+	// 2 to install (golang.go, rust-lang.rust), 1 already installed (ms-python.python)
+	if len(toInstall) != 2 {
+		t.Errorf("expected 2 extensions to install, got %d", len(toInstall))
+	}
+	if len(alreadyInstalled) != 1 {
+		t.Errorf("expected 1 already installed extension, got %d", len(alreadyInstalled))
+	}
+
+	// Verify correct categorization
+	if alreadyInstalled[0].ID != "ms-python.python" {
+		t.Errorf("expected ms-python.python to be already installed, got %s", alreadyInstalled[0].ID)
+	}
+
+	// toInstall should contain golang.go and rust-lang.rust
+	toInstallIDs := map[string]bool{
+		toInstall[0].ID: true,
+		toInstall[1].ID: true,
+	}
+	if !toInstallIDs["golang.go"] || !toInstallIDs["rust-lang.rust"] {
+		t.Errorf("toInstall should contain golang.go and rust-lang.rust")
+	}
+}
+
+func TestDetectConflicts_EmptyProfile(t *testing.T) {
+	// Empty extensions list
+	profileExtensions := []Extension{}
+
+	installedExtensions := []vscode.Extension{
+		{ID: "ms-python.python", Version: "1.5.0", Enabled: true},
+	}
+
+	toInstall, alreadyInstalled := detectConflicts(profileExtensions, installedExtensions)
+
+	// Both should be empty
+	if len(toInstall) != 0 {
+		t.Errorf("expected 0 extensions to install, got %d", len(toInstall))
+	}
+	if len(alreadyInstalled) != 0 {
+		t.Errorf("expected 0 already installed extensions, got %d", len(alreadyInstalled))
 	}
 }

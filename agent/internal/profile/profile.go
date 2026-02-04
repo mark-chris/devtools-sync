@@ -70,6 +70,27 @@ func Validate(profile *Profile) error {
 	return nil
 }
 
+// detectConflicts compares profile extensions with currently installed extensions
+// Returns two lists: extensions to install and extensions already installed
+func detectConflicts(profileExtensions []Extension, installedExtensions []vscode.Extension) (toInstall, alreadyInstalled []Extension) {
+	// Create map of installed extension IDs for O(1) lookup
+	installedMap := make(map[string]bool)
+	for _, ext := range installedExtensions {
+		installedMap[ext.ID] = true
+	}
+
+	// Categorize each profile extension
+	for _, ext := range profileExtensions {
+		if installedMap[ext.ID] {
+			alreadyInstalled = append(alreadyInstalled, ext)
+		} else {
+			toInstall = append(toInstall, ext)
+		}
+	}
+
+	return toInstall, alreadyInstalled
+}
+
 // Save captures current VS Code extensions to a profile
 func Save(name string, profilesDir string) (*Profile, error) {
 	if name == "" {
