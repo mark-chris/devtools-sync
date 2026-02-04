@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -424,5 +425,44 @@ func TestValidate_EmptyExtensionsList(t *testing.T) {
 	err := Validate(profile)
 	if err != nil {
 		t.Errorf("expected no error for empty extensions list, got: %v", err)
+	}
+}
+
+func TestLoad_InvalidProfile(t *testing.T) {
+	// Create temporary directory
+	tempDir := t.TempDir()
+
+	// Create invalid profile with bad extension ID
+	profile := Profile{
+		Name:      "invalid-profile",
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		Extensions: []Extension{
+			{ID: "invalid-no-dot", Version: "1.0.0", Enabled: true},
+		},
+	}
+
+	// Write invalid profile to file
+	data, err := json.MarshalIndent(profile, "", "  ")
+	if err != nil {
+		t.Fatalf("failed to marshal profile: %v", err)
+	}
+
+	profilePath := filepath.Join(tempDir, "invalid-profile.json")
+	if err := os.WriteFile(profilePath, data, 0644); err != nil {
+		t.Fatalf("failed to write profile file: %v", err)
+	}
+
+	// Try to load the invalid profile
+	_, err = Load("invalid-profile", tempDir)
+
+	// Should return an error
+	if err == nil {
+		t.Error("expected error loading invalid profile, got nil")
+	}
+
+	// Error should mention the invalid format
+	if err != nil && !strings.Contains(err.Error(), "must be in format 'publisher.name'") {
+		t.Errorf("expected error to contain \"must be in format 'publisher.name'\", got: %s", err.Error())
 	}
 }

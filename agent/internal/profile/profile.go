@@ -155,6 +155,11 @@ func Load(name string, profilesDir string) (*Profile, error) {
 		return nil, fmt.Errorf("failed to parse profile file: %w", err)
 	}
 
+	// Validate profile before attempting installation
+	if err := Validate(&profile); err != nil {
+		return nil, fmt.Errorf("invalid profile: %w", err)
+	}
+
 	// Install each extension
 	for _, ext := range profile.Extensions {
 		if err := vscode.InstallExtension(ext.ID); err != nil {
