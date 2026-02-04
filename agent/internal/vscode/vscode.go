@@ -12,9 +12,12 @@ import (
 
 // Extension represents a VS Code extension
 type Extension struct {
-	ID      string
-	Version string
-	Enabled bool
+	ID          string
+	Version     string
+	Enabled     bool
+	DisplayName string
+	Description string
+	Publisher   string
 }
 
 // DetectInstallation checks if VS Code is installed on the system

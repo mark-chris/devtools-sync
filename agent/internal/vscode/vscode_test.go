@@ -51,6 +51,27 @@ func TestGetVSCodePaths(t *testing.T) {
 	}
 }
 
+func TestExtensionStruct(t *testing.T) {
+	ext := Extension{
+		ID:          "ms-python.python",
+		Version:     "2024.0.0",
+		Enabled:     true,
+		DisplayName: "Python",
+		Description: "IntelliSense, linting, debugging",
+		Publisher:   "ms-python",
+	}
+
+	if ext.DisplayName != "Python" {
+		t.Errorf("expected DisplayName 'Python', got '%s'", ext.DisplayName)
+	}
+	if ext.Description != "IntelliSense, linting, debugging" {
+		t.Errorf("expected Description, got '%s'", ext.Description)
+	}
+	if ext.Publisher != "ms-python" {
+		t.Errorf("expected Publisher 'ms-python', got '%s'", ext.Publisher)
+	}
+}
+
 // Helper function to check if VS Code CLI is available
 func isVSCodeInstalled() bool {
 	_, err := exec.LookPath("code")
