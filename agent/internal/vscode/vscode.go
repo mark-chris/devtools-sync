@@ -325,3 +325,42 @@ func listExtensionsFromDirs(dirs []string) ([]Extension, error) {
 	merged := mergeExtensions(sets...)
 	return merged, nil
 }
+
+// getStatePaths returns storage.json paths for VS Code and Insiders on all platforms
+func getStatePaths() []string {
+	home := os.Getenv("HOME")
+	if home == "" {
+		home = os.Getenv("USERPROFILE") // Windows
+	}
+
+	var paths []string
+
+	switch runtime.GOOS {
+	case "darwin":
+		// macOS: ~/Library/Application Support/Code/User/globalStorage/storage.json
+		paths = []string{
+			filepath.Join(home, "Library", "Application Support", "Code", "User", "globalStorage", "storage.json"),
+			filepath.Join(home, "Library", "Application Support", "Code - Insiders", "User", "globalStorage", "storage.json"),
+		}
+	case "windows":
+		// Windows: %APPDATA%/Code/User/globalStorage/storage.json
+		appdata := os.Getenv("APPDATA")
+		if appdata == "" {
+			appdata = home // Fallback to home if APPDATA not set
+		}
+		paths = []string{
+			filepath.Join(appdata, "Code", "User", "globalStorage", "storage.json"),
+			filepath.Join(appdata, "Code - Insiders", "User", "globalStorage", "storage.json"),
+		}
+	case "linux":
+		// Linux: ~/.config/Code/User/globalStorage/storage.json
+		paths = []string{
+			filepath.Join(home, ".config", "Code", "User", "globalStorage", "storage.json"),
+			filepath.Join(home, ".config", "Code - Insiders", "User", "globalStorage", "storage.json"),
+		}
+	default:
+		paths = []string{}
+	}
+
+	return paths
+}

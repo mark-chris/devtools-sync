@@ -786,6 +786,110 @@ func TestListExtensionsWithFallback(t *testing.T) {
 	}
 }
 
+func TestGetStatePaths(t *testing.T) {
+	paths := getStatePaths()
+
+	// Should return at least 2 paths (VS Code and Insiders)
+	if len(paths) < 2 {
+		t.Errorf("expected at least 2 state paths, got %d", len(paths))
+	}
+
+	// All paths should be absolute
+	for _, path := range paths {
+		if !filepath.IsAbs(path) {
+			t.Errorf("expected absolute path, got '%s'", path)
+		}
+	}
+
+	// All paths should end with storage.json
+	for _, path := range paths {
+		if !strings.HasSuffix(path, "storage.json") {
+			t.Errorf("expected path to end with storage.json, got '%s'", path)
+		}
+	}
+}
+
+func TestGetStatePathsByOS(t *testing.T) {
+	home := os.Getenv("HOME")
+	if home == "" {
+		home = os.Getenv("USERPROFILE") // Windows
+	}
+
+	paths := getStatePaths()
+
+	switch runtime.GOOS {
+	case "darwin":
+		// macOS: ~/Library/Application Support/Code/User/globalStorage/storage.json
+		expectedStable := filepath.Join(home, "Library", "Application Support", "Code", "User", "globalStorage", "storage.json")
+		expectedInsiders := filepath.Join(home, "Library", "Application Support", "Code - Insiders", "User", "globalStorage", "storage.json")
+
+		foundStable := false
+		foundInsiders := false
+		for _, path := range paths {
+			if path == expectedStable {
+				foundStable = true
+			}
+			if path == expectedInsiders {
+				foundInsiders = true
+			}
+		}
+		if !foundStable {
+			t.Errorf("expected macOS stable path %s not found in %v", expectedStable, paths)
+		}
+		if !foundInsiders {
+			t.Errorf("expected macOS insiders path %s not found in %v", expectedInsiders, paths)
+		}
+
+	case "windows":
+		// Windows: %APPDATA%/Code/User/globalStorage/storage.json
+		appdata := os.Getenv("APPDATA")
+		if appdata == "" {
+			t.Skip("APPDATA not set, skipping Windows-specific test")
+		}
+		expectedStable := filepath.Join(appdata, "Code", "User", "globalStorage", "storage.json")
+		expectedInsiders := filepath.Join(appdata, "Code - Insiders", "User", "globalStorage", "storage.json")
+
+		foundStable := false
+		foundInsiders := false
+		for _, path := range paths {
+			if path == expectedStable {
+				foundStable = true
+			}
+			if path == expectedInsiders {
+				foundInsiders = true
+			}
+		}
+		if !foundStable {
+			t.Errorf("expected Windows stable path %s not found in %v", expectedStable, paths)
+		}
+		if !foundInsiders {
+			t.Errorf("expected Windows insiders path %s not found in %v", expectedInsiders, paths)
+		}
+
+	case "linux":
+		// Linux: ~/.config/Code/User/globalStorage/storage.json
+		expectedStable := filepath.Join(home, ".config", "Code", "User", "globalStorage", "storage.json")
+		expectedInsiders := filepath.Join(home, ".config", "Code - Insiders", "User", "globalStorage", "storage.json")
+
+		foundStable := false
+		foundInsiders := false
+		for _, path := range paths {
+			if path == expectedStable {
+				foundStable = true
+			}
+			if path == expectedInsiders {
+				foundInsiders = true
+			}
+		}
+		if !foundStable {
+			t.Errorf("expected Linux stable path %s not found in %v", expectedStable, paths)
+		}
+		if !foundInsiders {
+			t.Errorf("expected Linux insiders path %s not found in %v", expectedInsiders, paths)
+		}
+	}
+}
+
 // Helper function to check if VS Code CLI is available
 func isVSCodeInstalled() bool {
 	_, err := exec.LookPath("code")
