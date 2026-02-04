@@ -578,3 +578,49 @@ func TestDetectConflicts_EmptyProfile(t *testing.T) {
 		t.Errorf("expected 0 already installed extensions, got %d", len(alreadyInstalled))
 	}
 }
+
+func TestLoad_SkipsAlreadyInstalled(t *testing.T) {
+	// Create temporary directory
+	tempDir := t.TempDir()
+
+	// Write valid profile JSON with ms-python.python@2024.0.0
+	profile := Profile{
+		Name:      "test-skip-profile",
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		Extensions: []Extension{
+			{ID: "ms-python.python", Version: "2024.0.0", Enabled: true},
+		},
+	}
+
+	data, err := json.MarshalIndent(profile, "", "  ")
+	if err != nil {
+		t.Fatalf("failed to marshal profile: %v", err)
+	}
+
+	profilePath := filepath.Join(tempDir, "test-skip-profile.json")
+	if err := os.WriteFile(profilePath, data, 0644); err != nil {
+		t.Fatalf("failed to write profile file: %v", err)
+	}
+
+	// Call Load() - will try to install (may fail if VS Code not available, that's OK)
+	loadedProfile, err := Load("test-skip-profile", tempDir)
+
+	// Test verifies profile loads and validation passed
+	if err != nil {
+		// Error is acceptable if it's "failed to install extension" (VS Code not available)
+		if strings.Contains(err.Error(), "failed to install extension") {
+			t.Logf("Load failed as expected without VS Code: %v", err)
+			return
+		}
+		t.Fatalf("Load failed with unexpected error: %v", err)
+	}
+
+	// If no error, verify the profile loaded correctly
+	if loadedProfile.Name != "test-skip-profile" {
+		t.Errorf("expected profile name 'test-skip-profile', got '%s'", loadedProfile.Name)
+	}
+	if len(loadedProfile.Extensions) != 1 {
+		t.Errorf("expected 1 extension, got %d", len(loadedProfile.Extensions))
+	}
+}

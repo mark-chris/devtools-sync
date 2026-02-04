@@ -181,12 +181,35 @@ func Load(name string, profilesDir string) (*Profile, error) {
 		return nil, fmt.Errorf("invalid profile: %w", err)
 	}
 
-	// Install each extension
-	for _, ext := range profile.Extensions {
+	// Get installed extensions
+	installedExts, err := vscode.ListExtensions()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list installed extensions: %w", err)
+	}
+
+	// Detect conflicts
+	toInstall, alreadyInstalled := detectConflicts(profile.Extensions, installedExts)
+
+	// Report skipped extensions (if any)
+	if len(alreadyInstalled) > 0 {
+		fmt.Printf("Skipping %d already installed extension(s):\n", len(alreadyInstalled))
+		for _, ext := range alreadyInstalled {
+			fmt.Printf("  - %s (already installed)\n", ext.ID)
+		}
+	}
+
+	// Install only new extensions
+	for _, ext := range toInstall {
 		if err := vscode.InstallExtension(ext.ID); err != nil {
 			return nil, fmt.Errorf("failed to install extension %s: %w", ext.ID, err)
 		}
 	}
+
+	// Report summary after installation
+	fmt.Printf("\nProfile '%s' loaded successfully:\n", profile.Name)
+	fmt.Printf("  - Installed: %d extension(s)\n", len(toInstall))
+	fmt.Printf("  - Skipped: %d extension(s)\n", len(alreadyInstalled))
+	fmt.Printf("  - Total: %d extension(s)\n", len(profile.Extensions))
 
 	return &profile, nil
 }
