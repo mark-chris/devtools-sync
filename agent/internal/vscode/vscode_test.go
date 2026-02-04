@@ -1,7 +1,10 @@
 package vscode
 
 import (
+	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -69,6 +72,95 @@ func TestExtensionStruct(t *testing.T) {
 	}
 	if ext.Publisher != "ms-python" {
 		t.Errorf("expected Publisher 'ms-python', got '%s'", ext.Publisher)
+	}
+}
+
+func TestGetExtensionDirs(t *testing.T) {
+	dirs := getExtensionDirs()
+
+	// Should return at least 2 paths (VS Code and Insiders)
+	if len(dirs) < 2 {
+		t.Errorf("expected at least 2 extension directories, got %d", len(dirs))
+	}
+
+	// All paths should be absolute
+	for _, dir := range dirs {
+		if !filepath.IsAbs(dir) {
+			t.Errorf("expected absolute path, got '%s'", dir)
+		}
+	}
+}
+
+func TestGetExtensionDirsByOS(t *testing.T) {
+	home := os.Getenv("HOME")
+	if home == "" {
+		home = os.Getenv("USERPROFILE") // Windows
+	}
+
+	dirs := getExtensionDirs()
+
+	switch runtime.GOOS {
+	case "linux":
+		expectedStable := filepath.Join(home, ".vscode", "extensions")
+		expectedInsiders := filepath.Join(home, ".vscode-insiders", "extensions")
+
+		foundStable := false
+		foundInsiders := false
+		for _, dir := range dirs {
+			if dir == expectedStable {
+				foundStable = true
+			}
+			if dir == expectedInsiders {
+				foundInsiders = true
+			}
+		}
+		if !foundStable {
+			t.Errorf("expected Linux stable path %s not found in %v", expectedStable, dirs)
+		}
+		if !foundInsiders {
+			t.Errorf("expected Linux insiders path %s not found in %v", expectedInsiders, dirs)
+		}
+	case "darwin":
+		expectedStable := filepath.Join(home, ".vscode", "extensions")
+		expectedInsiders := filepath.Join(home, ".vscode-insiders", "extensions")
+
+		foundStable := false
+		foundInsiders := false
+		for _, dir := range dirs {
+			if dir == expectedStable {
+				foundStable = true
+			}
+			if dir == expectedInsiders {
+				foundInsiders = true
+			}
+		}
+		if !foundStable {
+			t.Errorf("expected macOS stable path %s not found in %v", expectedStable, dirs)
+		}
+		if !foundInsiders {
+			t.Errorf("expected macOS insiders path %s not found in %v", expectedInsiders, dirs)
+		}
+	case "windows":
+		appdata := os.Getenv("USERPROFILE")
+		expectedStable := filepath.Join(appdata, ".vscode", "extensions")
+		expectedInsiders := filepath.Join(appdata, ".vscode-insiders", "extensions")
+
+		foundStable := false
+		foundInsiders := false
+		for _, dir := range dirs {
+			if dir == expectedStable {
+				foundStable = true
+			}
+			if dir == expectedInsiders {
+				foundInsiders = true
+			}
+		}
+		if !foundStable {
+			t.Errorf("expected Windows stable path %s not found in %v", expectedStable, dirs)
+		}
+		if !foundInsiders {
+			t.Errorf("expected Windows insiders path %s not found in %v", expectedInsiders, dirs)
+		}
 	}
 }
 

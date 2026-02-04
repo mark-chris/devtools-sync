@@ -116,3 +116,31 @@ func getVSCodePaths() []string {
 		return []string{}
 	}
 }
+
+// getExtensionDirs returns extension directory paths for VS Code and Insiders
+func getExtensionDirs() []string {
+	home := os.Getenv("HOME")
+	if home == "" {
+		home = os.Getenv("USERPROFILE") // Windows
+	}
+
+	switch runtime.GOOS {
+	case "darwin":
+		return []string{
+			filepath.Join(home, ".vscode", "extensions"),
+			filepath.Join(home, ".vscode-insiders", "extensions"),
+		}
+	case "windows":
+		return []string{
+			filepath.Join(home, ".vscode", "extensions"),
+			filepath.Join(home, ".vscode-insiders", "extensions"),
+		}
+	case "linux":
+		return []string{
+			filepath.Join(home, ".vscode", "extensions"),
+			filepath.Join(home, ".vscode-insiders", "extensions"),
+		}
+	default:
+		return []string{}
+	}
+}
