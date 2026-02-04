@@ -281,6 +281,103 @@ func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(substr) == 0 || strings.Contains(s, substr))
 }
 
+func TestScanExtensionDir(t *testing.T) {
+	// Create temporary test directory structure
+	tmpDir := t.TempDir()
+
+	// Create valid extension
+	ext1Dir := filepath.Join(tmpDir, "ms-python.python-2024.0.0")
+	err := os.MkdirAll(ext1Dir, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest1 := `{
+		"name": "python",
+		"displayName": "Python",
+		"description": "Python extension",
+		"version": "2024.0.0",
+		"publisher": "ms-python"
+	}`
+	err = os.WriteFile(filepath.Join(ext1Dir, "package.json"), []byte(manifest1), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create another valid extension
+	ext2Dir := filepath.Join(tmpDir, "golang.go-0.40.0")
+	err = os.MkdirAll(ext2Dir, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest2 := `{
+		"name": "go",
+		"version": "0.40.0",
+		"publisher": "golang"
+	}`
+	err = os.WriteFile(filepath.Join(ext2Dir, "package.json"), []byte(manifest2), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create directory without package.json (should be skipped)
+	badDir := filepath.Join(tmpDir, "invalid-extension")
+	err = os.MkdirAll(badDir, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create directory with invalid JSON (should be skipped)
+	invalidDir := filepath.Join(tmpDir, "invalid-json-1.0.0")
+	err = os.MkdirAll(invalidDir, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = os.WriteFile(filepath.Join(invalidDir, "package.json"), []byte(`{invalid`), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Scan directory
+	extensions, err := scanExtensionDir(tmpDir)
+	if err != nil {
+		t.Fatalf("scanExtensionDir failed: %v", err)
+	}
+
+	// Should find 2 valid extensions
+	if len(extensions) != 2 {
+		t.Errorf("expected 2 extensions, got %d", len(extensions))
+	}
+
+	// Check that we got the right extensions
+	foundPython := false
+	foundGo := false
+	for _, ext := range extensions {
+		if ext.ID == "ms-python.python" && ext.Version == "2024.0.0" {
+			foundPython = true
+		}
+		if ext.ID == "golang.go" && ext.Version == "0.40.0" {
+			foundGo = true
+		}
+	}
+
+	if !foundPython {
+		t.Error("did not find Python extension")
+	}
+	if !foundGo {
+		t.Error("did not find Go extension")
+	}
+}
+
+func TestScanExtensionDirNonexistent(t *testing.T) {
+	extensions, err := scanExtensionDir("/nonexistent/directory")
+	if err != nil {
+		t.Fatalf("expected no error for nonexistent directory, got: %v", err)
+	}
+	if len(extensions) != 0 {
+		t.Errorf("expected empty slice for nonexistent directory, got %d extensions", len(extensions))
+	}
+}
+
 // Helper function to check if VS Code CLI is available
 func isVSCodeInstalled() bool {
 	_, err := exec.LookPath("code")

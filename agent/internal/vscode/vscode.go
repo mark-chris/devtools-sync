@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -184,4 +185,46 @@ func parseManifest(data []byte, dirName string) (Extension, error) {
 		Description: manifest.Description,
 		Publisher:   manifest.Publisher,
 	}, nil
+}
+
+// scanExtensionDir scans a directory for installed extensions
+func scanExtensionDir(dir string) ([]Extension, error) {
+	// Check if directory exists
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		return []Extension{}, nil
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read extension directory: %w", err)
+	}
+
+	extensions := make([]Extension, 0)
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		// Read package.json from extension directory
+		manifestPath := filepath.Join(dir, entry.Name(), "package.json")
+		data, err := os.ReadFile(manifestPath)
+		if err != nil {
+			// Skip extensions without package.json
+			log.Printf("Warning: skipping %s - no package.json found", entry.Name())
+			continue
+		}
+
+		// Parse manifest
+		ext, err := parseManifest(data, entry.Name())
+		if err != nil {
+			// Skip extensions with invalid manifests
+			log.Printf("Warning: skipping %s - %v", entry.Name(), err)
+			continue
+		}
+
+		extensions = append(extensions, ext)
+	}
+
+	return extensions, nil
 }
