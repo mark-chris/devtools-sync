@@ -48,7 +48,7 @@ func DetectInstallation() (bool, error) {
 }
 
 // ListExtensions returns a list of installed VS Code extensions
-// Tries CLI first, falls back to directory parsing on failure
+// Tries CLI first, falls back to directory parsing with state detection on failure
 func ListExtensions() ([]Extension, error) {
 	// Try CLI method first
 	extensions, err := listExtensionsViaCLI()
@@ -56,9 +56,9 @@ func ListExtensions() ([]Extension, error) {
 		return extensions, nil
 	}
 
-	// CLI failed, log and fall back to directory parsing
+	// CLI failed, log and fall back to directory parsing with state detection
 	log.Printf("CLI method failed (%v), falling back to directory parsing", err)
-	return listExtensionsFromDirs(getExtensionDirs())
+	return listExtensionsFromDirsWithState(getExtensionDirs(), getStatePaths())
 }
 
 // listExtensionsViaCLI lists extensions using the VS Code CLI
