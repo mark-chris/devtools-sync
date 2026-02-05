@@ -2,7 +2,10 @@ package keychain
 
 import (
 	"errors"
+	"fmt"
 	"sync"
+
+	"github.com/zalando/go-keyring"
 )
 
 // ErrNotFound is returned when a key doesn't exist
@@ -59,5 +62,46 @@ func (m *MockKeychain) Delete(key string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.store, key)
+	return nil
+}
+
+// SystemKeychain uses the OS keychain
+type SystemKeychain struct{}
+
+// NewSystemKeychain creates a new system keychain
+func NewSystemKeychain() *SystemKeychain {
+	return &SystemKeychain{}
+}
+
+// Set stores a value in the system keychain
+func (s *SystemKeychain) Set(key, value string) error {
+	err := keyring.Set(ServiceName, key, value)
+	if err != nil {
+		return fmt.Errorf("failed to store in keychain: %w", err)
+	}
+	return nil
+}
+
+// Get retrieves a value from the system keychain
+func (s *SystemKeychain) Get(key string) (string, error) {
+	value, err := keyring.Get(ServiceName, key)
+	if err != nil {
+		if errors.Is(err, keyring.ErrNotFound) {
+			return "", ErrNotFound
+		}
+		return "", fmt.Errorf("failed to retrieve from keychain: %w", err)
+	}
+	return value, nil
+}
+
+// Delete removes a value from the system keychain
+func (s *SystemKeychain) Delete(key string) error {
+	err := keyring.Delete(ServiceName, key)
+	if err != nil {
+		if errors.Is(err, keyring.ErrNotFound) {
+			return nil // Already deleted
+		}
+		return fmt.Errorf("failed to delete from keychain: %w", err)
+	}
 	return nil
 }

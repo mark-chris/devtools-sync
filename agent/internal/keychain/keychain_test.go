@@ -46,3 +46,44 @@ func TestMockKeychain_Delete(t *testing.T) {
 		t.Error("expected error after delete, got nil")
 	}
 }
+
+func TestSystemKeychain_SetAndGet(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping system keychain test in short mode")
+	}
+
+	kc := NewSystemKeychain()
+	testKey := "devtools-sync-test-key"
+
+	// Cleanup
+	defer func() {
+		_ = kc.Delete(testKey)
+	}()
+
+	err := kc.Set(testKey, "test-value")
+	if err != nil {
+		t.Fatalf("Set failed: %v", err)
+	}
+
+	value, err := kc.Get(testKey)
+	if err != nil {
+		t.Fatalf("Get failed: %v", err)
+	}
+
+	if value != "test-value" {
+		t.Errorf("expected 'test-value', got '%s'", value)
+	}
+}
+
+func TestSystemKeychain_GetNonexistent(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping system keychain test in short mode")
+	}
+
+	kc := NewSystemKeychain()
+
+	_, err := kc.Get("nonexistent-key-that-should-not-exist")
+	if err == nil {
+		t.Error("expected error for nonexistent key, got nil")
+	}
+}
