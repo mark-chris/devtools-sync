@@ -55,7 +55,12 @@ func NewClient(baseURL string) *Client {
 func (c *Client) Health() (*HealthResponse, error) {
 	url := fmt.Sprintf("%s/health", c.baseURL)
 
-	resp, err := c.httpClient.Get(url)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.retryableRequest(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to server: %w", err)
 	}
@@ -229,9 +234,12 @@ func (c *Client) UploadProfile(profile *Profile) error {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.GetBody = func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(data)), nil
+	}
 
-	// Send request
-	resp, err := c.httpClient.Do(req)
+	// Send request with retry
+	resp, err := c.retryableRequest(req)
 	if err != nil {
 		return fmt.Errorf("failed to upload profile: %w", err)
 	}
@@ -252,7 +260,12 @@ func (c *Client) UploadProfile(profile *Profile) error {
 func (c *Client) ListProfiles() ([]string, error) {
 	url := fmt.Sprintf("%s/api/v1/profiles", c.baseURL)
 
-	resp, err := c.httpClient.Get(url)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.retryableRequest(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list profiles: %w", err)
 	}
@@ -282,7 +295,12 @@ func (c *Client) ListProfiles() ([]string, error) {
 func (c *Client) DownloadProfile(name string) (*Profile, error) {
 	url := fmt.Sprintf("%s/api/v1/profiles/%s", c.baseURL, name)
 
-	resp, err := c.httpClient.Get(url)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.retryableRequest(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to download profile: %w", err)
 	}
