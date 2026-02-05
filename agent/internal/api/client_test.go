@@ -377,3 +377,79 @@ func TestDownloadProfile(t *testing.T) {
 		})
 	}
 }
+
+func TestRetryableRequest_Success(t *testing.T) {
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL)
+	req, _ := http.NewRequest(http.MethodGet, server.URL+"/test", nil)
+
+	resp, err := client.retryableRequest(req)
+	if err != nil {
+		t.Fatalf("expected success, got error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if attempts != 1 {
+		t.Errorf("expected 1 attempt, got %d", attempts)
+	}
+}
+
+func TestRetryableRequest_RetryOn503(t *testing.T) {
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts < 3 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL)
+	req, _ := http.NewRequest(http.MethodGet, server.URL+"/test", nil)
+
+	resp, err := client.retryableRequest(req)
+	if err != nil {
+		t.Fatalf("expected success after retries, got error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if attempts != 3 {
+		t.Errorf("expected 3 attempts, got %d", attempts)
+	}
+}
+
+func TestRetryableRequest_NoRetryOn400(t *testing.T) {
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL)
+	req, _ := http.NewRequest(http.MethodGet, server.URL+"/test", nil)
+
+	resp, err := client.retryableRequest(req)
+	if err != nil {
+		t.Fatalf("expected response, got error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if attempts != 1 {
+		t.Errorf("expected 1 attempt (no retry), got %d", attempts)
+	}
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", resp.StatusCode)
+	}
+}
