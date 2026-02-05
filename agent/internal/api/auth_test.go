@@ -85,3 +85,30 @@ func TestAuthenticatedClient_Login_InvalidCredentials(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 }
+
+func TestAuthenticatedClient_Logout(t *testing.T) {
+	kc := keychain.NewMockKeychain()
+
+	// Pre-populate keychain
+	_ = kc.Set(keychain.KeyAccessToken, "test-token")
+	_ = kc.Set(keychain.KeyCredentials, `{"email":"test@example.com","password":"pass"}`)
+
+	client := NewAuthenticatedClient("http://example.com", kc)
+
+	err := client.Logout()
+	if err != nil {
+		t.Fatalf("Logout failed: %v", err)
+	}
+
+	// Verify token deleted
+	_, err = kc.Get(keychain.KeyAccessToken)
+	if err == nil {
+		t.Error("expected token to be deleted")
+	}
+
+	// Verify credentials deleted
+	_, err = kc.Get(keychain.KeyCredentials)
+	if err == nil {
+		t.Error("expected credentials to be deleted")
+	}
+}

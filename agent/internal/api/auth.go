@@ -113,3 +113,17 @@ func (ac *AuthenticatedClient) Login(email, password string) error {
 
 	return nil
 }
+// Logout removes stored credentials from keychain
+func (ac *AuthenticatedClient) Logout() error {
+	// Delete access token
+	if err := ac.keychain.Delete(keychain.KeyAccessToken); err != nil {
+		return fmt.Errorf("failed to delete access token: %w", err)
+	}
+
+	// Delete stored credentials
+	if err := ac.keychain.Delete(keychain.KeyCredentials); err != nil {
+		return fmt.Errorf("failed to delete credentials: %w", err)
+	}
+
+	return nil
+}
