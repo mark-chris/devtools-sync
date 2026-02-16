@@ -453,3 +453,43 @@ func TestRetryableRequest_NoRetryOn400(t *testing.T) {
 		t.Errorf("expected 400, got %d", resp.StatusCode)
 	}
 }
+
+func TestUpdateProfile(t *testing.T) {
+	tests := []struct {
+		name           string
+		serverResponse int
+		wantErr        bool
+	}{
+		{"successful update", http.StatusOK, false},
+		{"successful update with 204", http.StatusNoContent, false},
+		{"not found", http.StatusNotFound, true},
+		{"server error", http.StatusInternalServerError, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPut {
+					t.Errorf("expected PUT, got %s", r.Method)
+				}
+				if r.URL.Path != "/api/v1/profiles/test-profile" {
+					t.Errorf("expected /api/v1/profiles/test-profile, got %s", r.URL.Path)
+				}
+
+				w.WriteHeader(tt.serverResponse)
+			}))
+			defer server.Close()
+
+			client := NewClient(server.URL)
+			profile := &Profile{
+				Name:       "test-profile",
+				Extensions: []Extension{{ID: "test.ext", Version: "1.0.0", Enabled: true}},
+			}
+
+			err := client.UpdateProfile("test-profile", profile)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("wantErr=%v, got err=%v", tt.wantErr, err)
+			}
+		})
+	}
+}

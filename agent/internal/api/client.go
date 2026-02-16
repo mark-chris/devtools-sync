@@ -329,3 +329,35 @@ func (c *Client) DownloadProfile(name string) (*Profile, error) {
 
 	return &profile, nil
 }
+
+// UpdateProfile updates an existing profile on the server
+func (c *Client) UpdateProfile(name string, profile *Profile) error {
+	url := fmt.Sprintf("%s/api/v1/profiles/%s", c.baseURL, name)
+
+	data, err := json.Marshal(profile)
+	if err != nil {
+		return fmt.Errorf("failed to marshal profile: %w", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPut, url, bytes.NewReader(data))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.GetBody = func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(data)), nil
+	}
+
+	resp, err := c.retryableRequest(req)
+	if err != nil {
+		return fmt.Errorf("failed to update profile: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		body, _ := readLimitedResponse(resp.Body, MaxResponseSize)
+		return fmt.Errorf("server returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	return nil
+}
