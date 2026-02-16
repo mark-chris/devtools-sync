@@ -30,8 +30,9 @@ var syncPushCmd = &cobra.Command{
 			return fmt.Errorf("failed to load config: %w\n\nRun 'devtools-sync init' to create the configuration file", err)
 		}
 
-		// Create API client
-		client := api.NewClient(cfg.Server.URL)
+		// Create authenticated client
+		kc := keychainFactory()
+		client := api.NewAuthenticatedClient(cfg.Server.URL, kc)
 
 		// List local profiles
 		profiles, err := profile.List(cfg.Profiles.Directory)
@@ -52,7 +53,7 @@ var syncPushCmd = &cobra.Command{
 			// Convert to API profile
 			apiProfile := convertToAPIProfile(&prof)
 
-			// Upload to server
+			// Upload to server with authentication
 			if err := client.UploadProfile(apiProfile); err != nil {
 				cmd.Printf("Failed to push profile '%s': %v\n", prof.Name, err)
 				failed = append(failed, prof.Name)
@@ -85,8 +86,9 @@ var syncPullCmd = &cobra.Command{
 			return fmt.Errorf("failed to load config: %w\n\nRun 'devtools-sync init' to create the configuration file", err)
 		}
 
-		// Create API client
-		client := api.NewClient(cfg.Server.URL)
+		// Create authenticated client
+		kc := keychainFactory()
+		client := api.NewAuthenticatedClient(cfg.Server.URL, kc)
 
 		// List server profiles
 		serverProfiles, err := client.ListProfiles()
@@ -108,7 +110,7 @@ var syncPullCmd = &cobra.Command{
 
 		// Download each profile
 		for _, name := range serverProfiles {
-			// Download from server
+			// Download from server with authentication
 			apiProfile, err := client.DownloadProfile(name)
 			if err != nil {
 				cmd.Printf("Failed to download profile '%s': %v\n", name, err)

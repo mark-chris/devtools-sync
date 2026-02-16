@@ -183,6 +183,105 @@ func (ac *AuthenticatedClient) AuthenticatedRequest(req *http.Request) (*http.Re
 	return resp, nil
 }
 
+// UploadProfile uploads a profile with authentication
+func (ac *AuthenticatedClient) UploadProfile(profile *Profile) error {
+	data, err := json.Marshal(profile)
+	if err != nil {
+		return fmt.Errorf("failed to marshal profile: %w", err)
+	}
+
+	url := fmt.Sprintf("%s/api/v1/profiles", ac.client.baseURL)
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(data))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.GetBody = func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(data)), nil
+	}
+
+	resp, err := ac.AuthenticatedRequest(req)
+	if err != nil {
+		return fmt.Errorf("failed to upload profile: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		body, _ := readLimitedResponse(resp.Body, MaxResponseSize)
+		return fmt.Errorf("server returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	return nil
+}
+
+// ListProfiles retrieves all profile names with authentication
+func (ac *AuthenticatedClient) ListProfiles() ([]string, error) {
+	url := fmt.Sprintf("%s/api/v1/profiles", ac.client.baseURL)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := ac.AuthenticatedRequest(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list profiles: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := readLimitedResponse(resp.Body, MaxResponseSize)
+		return nil, fmt.Errorf("server returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	body, err := readLimitedResponse(resp.Body, MaxResponseSize)
+	if err != nil {
+		return nil, err
+	}
+
+	var profiles []string
+	if err := json.Unmarshal(body, &profiles); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	return profiles, nil
+}
+
+// DownloadProfile retrieves a specific profile with authentication
+func (ac *AuthenticatedClient) DownloadProfile(name string) (*Profile, error) {
+	url := fmt.Sprintf("%s/api/v1/profiles/%s", ac.client.baseURL, name)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := ac.AuthenticatedRequest(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to download profile: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("profile '%s' not found on server", name)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := readLimitedResponse(resp.Body, MaxResponseSize)
+		return nil, fmt.Errorf("server returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	body, err := readLimitedResponse(resp.Body, MaxResponseSize)
+	if err != nil {
+		return nil, err
+	}
+
+	var profile Profile
+	if err := json.Unmarshal(body, &profile); err != nil {
+		return nil, fmt.Errorf("failed to parse profile: %w", err)
+	}
+
+	return &profile, nil
+}
+
 // Logout removes stored credentials from keychain
 func (ac *AuthenticatedClient) Logout() error {
 	// Delete access token
