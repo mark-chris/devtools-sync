@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestNewClient(t *testing.T) {
@@ -491,5 +492,76 @@ func TestUpdateProfile(t *testing.T) {
 				t.Errorf("wantErr=%v, got err=%v", tt.wantErr, err)
 			}
 		})
+	}
+}
+
+func TestSync(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("expected POST, got %s", r.Method)
+		}
+		if r.URL.Path != "/api/v1/sync" {
+			t.Errorf("expected /api/v1/sync, got %s", r.URL.Path)
+		}
+
+		var req SyncRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("failed to decode request: %v", err)
+		}
+
+		if req.ProfileName != "test-profile" {
+			t.Errorf("expected profile name 'test-profile', got '%s'", req.ProfileName)
+		}
+
+		resp := SyncResponse{
+			Status: "success",
+			Merged: []Extension{{ID: "merged.ext", Version: "2.0.0", Enabled: true}},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL)
+	syncReq := &SyncRequest{
+		ProfileName: "test-profile",
+		Extensions:  []Extension{{ID: "local.ext", Version: "1.0.0", Enabled: true}},
+		LastSync:    time.Now().Add(-1 * time.Hour),
+	}
+
+	syncResp, err := client.Sync(syncReq)
+	if err != nil {
+		t.Fatalf("Sync failed: %v", err)
+	}
+
+	if syncResp.Status != "success" {
+		t.Errorf("expected status 'success', got '%s'", syncResp.Status)
+	}
+
+	if len(syncResp.Merged) != 1 {
+		t.Errorf("expected 1 merged extension, got %d", len(syncResp.Merged))
+	}
+
+	if syncResp.Merged[0].ID != "merged.ext" {
+		t.Errorf("expected merged extension 'merged.ext', got '%s'", syncResp.Merged[0].ID)
+	}
+}
+
+func TestSync_ServerError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"error":"internal error"}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL)
+	syncReq := &SyncRequest{
+		ProfileName: "test-profile",
+		Extensions:  []Extension{{ID: "local.ext", Version: "1.0.0", Enabled: true}},
+	}
+
+	_, err := client.Sync(syncReq)
+	if err == nil {
+		t.Fatal("expected error, got nil")
 	}
 }

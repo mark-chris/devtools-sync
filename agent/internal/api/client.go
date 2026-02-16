@@ -361,3 +361,66 @@ func (c *Client) UpdateProfile(name string, profile *Profile) error {
 
 	return nil
 }
+
+// SyncRequest represents a sync request
+type SyncRequest struct {
+	ProfileName string      `json:"profile_name"`
+	Extensions  []Extension `json:"extensions"`
+	LastSync    time.Time   `json:"last_sync,omitempty"`
+}
+
+// SyncResponse represents a sync response
+type SyncResponse struct {
+	Status    string      `json:"status"`
+	Merged    []Extension `json:"merged,omitempty"`
+	Conflicts []Conflict  `json:"conflicts,omitempty"`
+}
+
+// Conflict represents a sync conflict
+type Conflict struct {
+	ExtensionID string `json:"extension_id"`
+	LocalVer    string `json:"local_version"`
+	RemoteVer   string `json:"remote_version"`
+}
+
+// Sync synchronizes extensions with the server
+func (c *Client) Sync(req *SyncRequest) (*SyncResponse, error) {
+	url := fmt.Sprintf("%s/api/v1/sync", c.baseURL)
+
+	data, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal sync request: %w", err)
+	}
+
+	httpReq, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.GetBody = func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(data)), nil
+	}
+
+	resp, err := c.retryableRequest(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sync: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := readLimitedResponse(resp.Body, MaxResponseSize)
+		return nil, fmt.Errorf("server returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	body, err := readLimitedResponse(resp.Body, MaxResponseSize)
+	if err != nil {
+		return nil, err
+	}
+
+	var syncResp SyncResponse
+	if err := json.Unmarshal(body, &syncResp); err != nil {
+		return nil, fmt.Errorf("failed to parse sync response: %w", err)
+	}
+
+	return &syncResp, nil
+}
