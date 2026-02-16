@@ -3,12 +3,16 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 
 	"github.com/mark-chris/devtools-sync/agent/internal/keychain"
 )
+
+// ErrNotAuthenticated is returned when no access token is available
+var ErrNotAuthenticated = errors.New("not authenticated: please run 'devtools-sync login' first")
 
 // AuthenticatedClient wraps Client with authentication
 type AuthenticatedClient struct {
@@ -113,6 +117,72 @@ func (ac *AuthenticatedClient) Login(email, password string) error {
 
 	return nil
 }
+// AuthenticatedRequest executes an HTTP request with authentication and auto re-login on 401
+func (ac *AuthenticatedClient) AuthenticatedRequest(req *http.Request) (*http.Response, error) {
+	// Get access token
+	token, err := ac.keychain.Get(keychain.KeyAccessToken)
+	if err != nil {
+		if errors.Is(err, keychain.ErrNotFound) {
+			return nil, ErrNotAuthenticated
+		}
+		return nil, fmt.Errorf("failed to retrieve access token: %w", err)
+	}
+
+	// Add Authorization header
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+
+	// Make request
+	resp, err := ac.client.retryableRequest(req)
+	if err != nil {
+		return nil, err
+	}
+
+	// If 401, attempt auto re-login
+	if resp.StatusCode == http.StatusUnauthorized {
+		_ = resp.Body.Close()
+
+		// Try to get stored credentials
+		credsJSON, err := ac.keychain.Get(keychain.KeyCredentials)
+		if err != nil {
+			return nil, fmt.Errorf("session expired: please run 'devtools-sync login' again")
+		}
+
+		var creds StoredCredentials
+		if err := json.Unmarshal([]byte(credsJSON), &creds); err != nil {
+			return nil, fmt.Errorf("failed to parse stored credentials: %w", err)
+		}
+
+		// Attempt re-login
+		if err := ac.Login(creds.Email, creds.Password); err != nil {
+			return nil, fmt.Errorf("auto re-login failed: %w", err)
+		}
+
+		// Retry original request with new token
+		token, err = ac.keychain.Get(keychain.KeyAccessToken)
+		if err != nil {
+			return nil, fmt.Errorf("failed to retrieve new access token: %w", err)
+		}
+
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+
+		// Reset request body if needed
+		if req.GetBody != nil {
+			body, err := req.GetBody()
+			if err != nil {
+				return nil, fmt.Errorf("failed to reset request body: %w", err)
+			}
+			req.Body = body
+		}
+
+		resp, err = ac.client.retryableRequest(req)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return resp, nil
+}
+
 // Logout removes stored credentials from keychain
 func (ac *AuthenticatedClient) Logout() error {
 	// Delete access token

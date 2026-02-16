@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -110,5 +111,103 @@ func TestAuthenticatedClient_Logout(t *testing.T) {
 	_, err = kc.Get(keychain.KeyCredentials)
 	if err == nil {
 		t.Error("expected credentials to be deleted")
+	}
+}
+
+func TestAuthenticatedClient_AuthenticatedRequest(t *testing.T) {
+	kc := keychain.NewMockKeychain()
+	_ = kc.Set(keychain.KeyAccessToken, "valid-token")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth := r.Header.Get("Authorization")
+		if auth != "Bearer valid-token" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	}))
+	defer server.Close()
+
+	client := NewAuthenticatedClient(server.URL, kc)
+
+	req, _ := http.NewRequest(http.MethodGet, server.URL+"/test", nil)
+	resp, err := client.AuthenticatedRequest(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestAuthenticatedClient_AutoRelogin(t *testing.T) {
+	kc := keychain.NewMockKeychain()
+	_ = kc.Set(keychain.KeyAccessToken, "expired-token")
+	_ = kc.Set(keychain.KeyCredentials, `{"email":"test@example.com","password":"password123"}`)
+
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+
+		if r.URL.Path == "/auth/login" {
+			// Login endpoint
+			resp := map[string]interface{}{
+				"access_token": "new-token",
+				"token_type":   "Bearer",
+				"expires_in":   3600,
+			}
+			_ = json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		// Protected endpoint
+		auth := r.Header.Get("Authorization")
+		if auth == "Bearer expired-token" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if auth == "Bearer new-token" {
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+			return
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer server.Close()
+
+	client := NewAuthenticatedClient(server.URL, kc)
+
+	req, _ := http.NewRequest(http.MethodGet, server.URL+"/protected", nil)
+	resp, err := client.AuthenticatedRequest(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200 after re-login, got %d", resp.StatusCode)
+	}
+
+	// Verify new token stored
+	token, _ := kc.Get(keychain.KeyAccessToken)
+	if token != "new-token" {
+		t.Errorf("expected new-token, got %s", token)
+	}
+}
+
+func TestAuthenticatedClient_NoTokenError(t *testing.T) {
+	kc := keychain.NewMockKeychain()
+	client := NewAuthenticatedClient("http://example.com", kc)
+
+	req, _ := http.NewRequest(http.MethodGet, "http://example.com/test", nil)
+	_, err := client.AuthenticatedRequest(req)
+	if err == nil {
+		t.Fatal("expected error when no token, got nil")
+	}
+	if !errors.Is(err, ErrNotAuthenticated) {
+		t.Errorf("expected ErrNotAuthenticated, got: %v", err)
 	}
 }
