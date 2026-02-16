@@ -41,7 +41,7 @@ curl -fsSL https://raw.githubusercontent.com/mark-chris/devtools-sync/main/insta
 
 # Initialize and login
 devtools-sync init
-devtools-sync auth login
+devtools-sync login
 
 # Save your current extensions to a profile
 devtools-sync profile save my-setup
@@ -136,7 +136,21 @@ devtools-sync profile load my-setup
 # Skips already installed extensions automatically
 ```
 
+### Authentication
+
+```bash
+# Login (stores token securely in system keychain)
+devtools-sync login
+# Or with flags:
+devtools-sync login --email user@example.com --password mypassword
+
+# Logout (removes stored credentials)
+devtools-sync logout
+```
+
 ### Synchronization
+
+Sync commands require authentication. Run `devtools-sync login` first.
 
 ```bash
 # Push local profiles to server
@@ -195,6 +209,24 @@ logging:
   level: info
   file: ~/.devtools-sync/logs/agent.log
 ```
+
+## Security
+
+### Token Storage
+
+Authentication tokens are stored securely in your system's native keychain:
+- **Linux**: libsecret (GNOME Keyring, KWallet)
+- **macOS**: macOS Keychain
+- **Windows**: Windows Credential Manager
+
+### Retry Logic
+
+The client automatically retries failed requests with exponential backoff:
+- **Max retries**: 3 (4 total attempts)
+- **Initial delay**: 1 second
+- **Backoff factor**: 2x (1s, 2s, 4s)
+- **Jitter**: +/-10% randomization
+- **Retries on**: network errors, HTTP 429/502/503/504
 
 ## Development
 

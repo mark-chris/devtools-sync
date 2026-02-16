@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestNewClient(t *testing.T) {
@@ -375,5 +376,192 @@ func TestDownloadProfile(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestRetryableRequest_Success(t *testing.T) {
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL)
+	req, _ := http.NewRequest(http.MethodGet, server.URL+"/test", nil)
+
+	resp, err := client.retryableRequest(req)
+	if err != nil {
+		t.Fatalf("expected success, got error: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if attempts != 1 {
+		t.Errorf("expected 1 attempt, got %d", attempts)
+	}
+}
+
+func TestRetryableRequest_RetryOn503(t *testing.T) {
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts < 3 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL)
+	req, _ := http.NewRequest(http.MethodGet, server.URL+"/test", nil)
+
+	resp, err := client.retryableRequest(req)
+	if err != nil {
+		t.Fatalf("expected success after retries, got error: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if attempts != 3 {
+		t.Errorf("expected 3 attempts, got %d", attempts)
+	}
+}
+
+func TestRetryableRequest_NoRetryOn400(t *testing.T) {
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL)
+	req, _ := http.NewRequest(http.MethodGet, server.URL+"/test", nil)
+
+	resp, err := client.retryableRequest(req)
+	if err != nil {
+		t.Fatalf("expected response, got error: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if attempts != 1 {
+		t.Errorf("expected 1 attempt (no retry), got %d", attempts)
+	}
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestUpdateProfile(t *testing.T) {
+	tests := []struct {
+		name           string
+		serverResponse int
+		wantErr        bool
+	}{
+		{"successful update", http.StatusOK, false},
+		{"successful update with 204", http.StatusNoContent, false},
+		{"not found", http.StatusNotFound, true},
+		{"server error", http.StatusInternalServerError, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPut {
+					t.Errorf("expected PUT, got %s", r.Method)
+				}
+				if r.URL.Path != "/api/v1/profiles/test-profile" {
+					t.Errorf("expected /api/v1/profiles/test-profile, got %s", r.URL.Path)
+				}
+
+				w.WriteHeader(tt.serverResponse)
+			}))
+			defer server.Close()
+
+			client := NewClient(server.URL)
+			profile := &Profile{
+				Name:       "test-profile",
+				Extensions: []Extension{{ID: "test.ext", Version: "1.0.0", Enabled: true}},
+			}
+
+			err := client.UpdateProfile("test-profile", profile)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("wantErr=%v, got err=%v", tt.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestSync(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("expected POST, got %s", r.Method)
+		}
+		if r.URL.Path != "/api/v1/sync" {
+			t.Errorf("expected /api/v1/sync, got %s", r.URL.Path)
+		}
+
+		var req SyncRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("failed to decode request: %v", err)
+		}
+
+		if req.ProfileName != "test-profile" {
+			t.Errorf("expected profile name 'test-profile', got '%s'", req.ProfileName)
+		}
+
+		resp := SyncResponse{
+			Status: "success",
+			Merged: []Extension{{ID: "merged.ext", Version: "2.0.0", Enabled: true}},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL)
+	syncReq := &SyncRequest{
+		ProfileName: "test-profile",
+		Extensions:  []Extension{{ID: "local.ext", Version: "1.0.0", Enabled: true}},
+		LastSync:    time.Now().Add(-1 * time.Hour),
+	}
+
+	syncResp, err := client.Sync(syncReq)
+	if err != nil {
+		t.Fatalf("Sync failed: %v", err)
+	}
+
+	if syncResp.Status != "success" {
+		t.Errorf("expected status 'success', got '%s'", syncResp.Status)
+	}
+
+	if len(syncResp.Merged) != 1 {
+		t.Errorf("expected 1 merged extension, got %d", len(syncResp.Merged))
+	}
+
+	if syncResp.Merged[0].ID != "merged.ext" {
+		t.Errorf("expected merged extension 'merged.ext', got '%s'", syncResp.Merged[0].ID)
+	}
+}
+
+func TestSync_ServerError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"error":"internal error"}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL)
+	syncReq := &SyncRequest{
+		ProfileName: "test-profile",
+		Extensions:  []Extension{{ID: "local.ext", Version: "1.0.0", Enabled: true}},
+	}
+
+	_, err := client.Sync(syncReq)
+	if err == nil {
+		t.Fatal("expected error, got nil")
 	}
 }

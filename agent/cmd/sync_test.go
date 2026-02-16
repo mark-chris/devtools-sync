@@ -12,11 +12,28 @@ import (
 	"time"
 
 	"github.com/mark-chris/devtools-sync/agent/internal/api"
+	"github.com/mark-chris/devtools-sync/agent/internal/keychain"
 	"github.com/mark-chris/devtools-sync/agent/internal/profile"
 	"github.com/spf13/cobra"
 )
 
+// setupMockKeychain configures the keychainFactory for tests with a pre-authenticated token
+func setupMockKeychain(t *testing.T) {
+	t.Helper()
+	mockKC := keychain.NewMockKeychain()
+	_ = mockKC.Set(keychain.KeyAccessToken, "test-token")
+	origFactory := keychainFactory
+	keychainFactory = func() keychain.Keychain {
+		return mockKC
+	}
+	t.Cleanup(func() {
+		keychainFactory = origFactory
+	})
+}
+
 func TestSyncPushCommand_NoProfiles(t *testing.T) {
+	setupMockKeychain(t)
+
 	// Create temporary home directory
 	tempHome := t.TempDir()
 	originalHome := os.Getenv("HOME")
@@ -55,6 +72,8 @@ func TestSyncPushCommand_NoProfiles(t *testing.T) {
 }
 
 func TestSyncPushCommand_WithProfiles(t *testing.T) {
+	setupMockKeychain(t)
+
 	// Create temporary home directory
 	tempHome := t.TempDir()
 	originalHome := os.Getenv("HOME")
@@ -122,6 +141,8 @@ func TestSyncPushCommand_WithProfiles(t *testing.T) {
 }
 
 func TestSyncPullCommand_NoProfiles(t *testing.T) {
+	setupMockKeychain(t)
+
 	// Create temporary home directory
 	tempHome := t.TempDir()
 	originalHome := os.Getenv("HOME")
@@ -174,6 +195,8 @@ func TestSyncPullCommand_NoProfiles(t *testing.T) {
 }
 
 func TestSyncPullCommand_WithProfiles(t *testing.T) {
+	setupMockKeychain(t)
+
 	// Create temporary home directory
 	tempHome := t.TempDir()
 	originalHome := os.Getenv("HOME")
@@ -245,6 +268,8 @@ func TestSyncPullCommand_WithProfiles(t *testing.T) {
 }
 
 func TestSyncPullCommand_SkipsNewerLocal(t *testing.T) {
+	setupMockKeychain(t)
+
 	// Create temporary home directory
 	tempHome := t.TempDir()
 	originalHome := os.Getenv("HOME")
