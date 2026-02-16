@@ -43,7 +43,7 @@ func runLogin(cmd *cobra.Command, args []string) error {
 
 	// Prompt for email if not provided
 	if loginEmail == "" {
-		fmt.Fprint(cmd.OutOrStdout(), "Email: ")
+		_, _ = fmt.Fprint(cmd.OutOrStdout(), "Email: ")
 		_, err := fmt.Fscanln(cmd.InOrStdin(), &loginEmail)
 		if err != nil {
 			return fmt.Errorf("failed to read email: %w", err)
@@ -52,9 +52,9 @@ func runLogin(cmd *cobra.Command, args []string) error {
 
 	// Prompt for password if not provided
 	if loginPassword == "" {
-		fmt.Fprint(cmd.OutOrStdout(), "Password: ")
+		_, _ = fmt.Fprint(cmd.OutOrStdout(), "Password: ")
 		passwordBytes, err := term.ReadPassword(int(syscall.Stdin))
-		fmt.Fprintln(cmd.OutOrStdout()) // newline after password
+		_, _ = fmt.Fprintln(cmd.OutOrStdout()) // newline after password
 		if err != nil {
 			return fmt.Errorf("failed to read password: %w", err)
 		}
@@ -70,7 +70,7 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("login failed: %w", err)
 	}
 
-	fmt.Fprintln(cmd.OutOrStdout(), "Login successful! Token stored securely.")
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Login successful! Token stored securely.")
 
 	// Reset flags for reuse in tests
 	loginEmail = ""

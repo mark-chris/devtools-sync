@@ -35,7 +35,7 @@ func runLogout(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("logout failed: %w", err)
 	}
 
-	fmt.Fprintln(cmd.OutOrStdout(), "Logged out successfully. Authentication credentials removed.")
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Logged out successfully. Authentication credentials removed.")
 
 	return nil
 }

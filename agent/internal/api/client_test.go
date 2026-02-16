@@ -395,7 +395,7 @@ func TestRetryableRequest_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected success, got error: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if attempts != 1 {
 		t.Errorf("expected 1 attempt, got %d", attempts)
@@ -422,7 +422,7 @@ func TestRetryableRequest_RetryOn503(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected success after retries, got error: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if attempts != 3 {
 		t.Errorf("expected 3 attempts, got %d", attempts)
@@ -444,7 +444,7 @@ func TestRetryableRequest_NoRetryOn400(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected response, got error: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if attempts != 1 {
 		t.Errorf("expected 1 attempt (no retry), got %d", attempts)
