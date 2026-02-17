@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/mark-chris/devtools-sync/server/internal/auth"
+	"github.com/mark-chris/devtools-sync/server/internal/middleware"
 )
 
 // UserByEmailFunc is a function that retrieves a user by email
@@ -27,11 +28,13 @@ type LoginResponse struct {
 	ExpiresIn   int    `json:"expires_in"`
 }
 
-// NewLoginHandler creates a new login handler
+// NewLoginHandler creates a new login handler.
+// If rateLimiter is non-nil, the rate limit for the client IP is reset on successful login.
 func NewLoginHandler(
 	authService *auth.AuthService,
 	userByEmail UserByEmailFunc,
 	storeRefreshToken StoreRefreshTokenFunc,
+	rateLimiter *auth.RateLimiter,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Parse request
@@ -99,6 +102,11 @@ func NewLoginHandler(
 				"error": "Failed to store refresh token",
 			})
 			return
+		}
+
+		// Reset rate limit on successful login
+		if rateLimiter != nil {
+			rateLimiter.ResetLimit(middleware.GetClientIP(r))
 		}
 
 		// Set refresh token cookie
