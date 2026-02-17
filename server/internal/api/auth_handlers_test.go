@@ -520,7 +520,7 @@ func TestLogoutHandler_ValidToken(t *testing.T) {
 		return nil
 	}
 
-	handler := NewLogoutHandler(authService, getRefreshToken, revokeRefreshToken)
+	handler := NewLogoutHandler(authService, getRefreshToken, revokeRefreshToken, nil)
 
 	req := httptest.NewRequest("POST", "/auth/logout", nil)
 	req.AddCookie(&http.Cookie{
@@ -583,7 +583,7 @@ func TestLogoutHandler_MissingCookie(t *testing.T) {
 		return nil
 	}
 
-	handler := NewLogoutHandler(authService, getRefreshToken, revokeRefreshToken)
+	handler := NewLogoutHandler(authService, getRefreshToken, revokeRefreshToken, nil)
 
 	req := httptest.NewRequest("POST", "/auth/logout", nil)
 	w := httptest.NewRecorder()
@@ -594,6 +594,64 @@ func TestLogoutHandler_MissingCookie(t *testing.T) {
 	// Assert - should still return 200 (idempotent)
 	if w.Code != http.StatusOK {
 		t.Errorf("response code = %d, want %d (logout is idempotent)", w.Code, http.StatusOK)
+	}
+}
+
+func TestLogoutHandler_AuditLogsEvent(t *testing.T) {
+	secretKey := []byte("test-secret-key-min-32-bytes-long!")
+	authService := auth.NewAuthService(secretKey)
+
+	refreshToken, _ := authService.GenerateRefreshToken()
+	tokenHash := authService.HashToken(refreshToken)
+
+	storedToken := &auth.RefreshToken{
+		UserID:    uuid.New(),
+		TokenHash: tokenHash,
+		ExpiresAt: time.Now().Add(7 * 24 * time.Hour),
+		CreatedAt: time.Now(),
+	}
+
+	getRefreshToken := func(tokenHash string) (*auth.RefreshToken, error) {
+		return storedToken, nil
+	}
+
+	revokeRefreshToken := func(rt *auth.RefreshToken) error {
+		return nil
+	}
+
+	auditLogger := auth.NewInMemoryAuditLogger()
+
+	handler := NewLogoutHandler(authService, getRefreshToken, revokeRefreshToken, auditLogger)
+
+	req := httptest.NewRequest("POST", "/auth/logout", nil)
+	req.AddCookie(&http.Cookie{Name: "refresh_token", Value: refreshToken})
+	req.RemoteAddr = "10.0.0.1:12345"
+	req.Header.Set("User-Agent", "TestAgent/1.0")
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	logs := auditLogger.GetLogs()
+	if len(logs) != 1 {
+		t.Fatalf("expected 1 audit log, got %d", len(logs))
+	}
+
+	entry := logs[0]
+	if entry.EventType != auth.AuditLogout {
+		t.Errorf("event type = %v, want %v", entry.EventType, auth.AuditLogout)
+	}
+	if entry.ActorID == nil || *entry.ActorID != storedToken.UserID {
+		t.Errorf("actor ID = %v, want %v", entry.ActorID, storedToken.UserID)
+	}
+	if entry.ClientIP != "10.0.0.1" {
+		t.Errorf("client IP = %v, want 10.0.0.1", entry.ClientIP)
+	}
+	if entry.UserAgent != "TestAgent/1.0" {
+		t.Errorf("user agent = %v, want TestAgent/1.0", entry.UserAgent)
 	}
 }
 

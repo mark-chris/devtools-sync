@@ -311,11 +311,13 @@ func NewRefreshHandler(
 // RevokeRefreshTokenFunc is a function that revokes a refresh token
 type RevokeRefreshTokenFunc func(rt *auth.RefreshToken) error
 
-// NewLogoutHandler creates a new logout handler
+// NewLogoutHandler creates a new logout handler.
+// If auditLogger is non-nil, logout events are audit-logged.
 func NewLogoutHandler(
 	authService *auth.AuthService,
 	getRefreshToken GetRefreshTokenFunc,
 	revokeRefreshToken RevokeRefreshTokenFunc,
+	auditLogger auth.AuditLogger,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Get refresh token from cookie
@@ -339,6 +341,17 @@ func NewLogoutHandler(
 			now := time.Now()
 			storedToken.RevokedAt = &now
 			_ = revokeRefreshToken(storedToken) // Ignore error - logout is idempotent
+
+			if auditLogger != nil {
+				_ = auditLogger.Log(&auth.AuditLog{
+					EventType: auth.AuditLogout,
+					ActorType: auth.ActorTypeUser,
+					ActorID:   &storedToken.UserID,
+					Details:   map[string]interface{}{},
+					ClientIP:  middleware.GetClientIP(r),
+					UserAgent: r.UserAgent(),
+				})
+			}
 		}
 
 		// Clear cookie regardless of token validity (idempotent)
