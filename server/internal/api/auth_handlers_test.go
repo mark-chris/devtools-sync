@@ -48,7 +48,7 @@ func TestLoginHandler_ValidCredentials(t *testing.T) {
 		return nil
 	}
 
-	handler := NewLoginHandler(authService, userByEmail, storeRefreshToken, nil)
+	handler := NewLoginHandler(authService, userByEmail, storeRefreshToken, nil, nil)
 
 	// Create request
 	body := map[string]string{
@@ -155,7 +155,7 @@ func TestLoginHandler_InvalidCredentials(t *testing.T) {
 		return nil
 	}
 
-	handler := NewLoginHandler(authService, userByEmail, storeRefreshToken, nil)
+	handler := NewLoginHandler(authService, userByEmail, storeRefreshToken, nil, nil)
 
 	body := map[string]string{
 		"email":    testUser.Email,
@@ -203,7 +203,7 @@ func TestLoginHandler_InactiveUser(t *testing.T) {
 		return nil
 	}
 
-	handler := NewLoginHandler(authService, userByEmail, storeRefreshToken, nil)
+	handler := NewLoginHandler(authService, userByEmail, storeRefreshToken, nil, nil)
 
 	body := map[string]string{
 		"email":    testUser.Email,
@@ -237,7 +237,7 @@ func TestLoginHandler_UserNotFound(t *testing.T) {
 		return nil
 	}
 
-	handler := NewLoginHandler(authService, userByEmail, storeRefreshToken, nil)
+	handler := NewLoginHandler(authService, userByEmail, storeRefreshToken, nil, nil)
 
 	body := map[string]string{
 		"email":    "nonexistent@example.com",
@@ -271,7 +271,7 @@ func TestLoginHandler_MalformedJSON(t *testing.T) {
 		return nil
 	}
 
-	handler := NewLoginHandler(authService, userByEmail, storeRefreshToken, nil)
+	handler := NewLoginHandler(authService, userByEmail, storeRefreshToken, nil, nil)
 
 	req := httptest.NewRequest("POST", "/auth/login", bytes.NewReader([]byte("invalid json")))
 	req.Header.Set("Content-Type", "application/json")
@@ -597,6 +597,121 @@ func TestLogoutHandler_MissingCookie(t *testing.T) {
 	}
 }
 
+func TestLoginHandler_AuditLogsSuccess(t *testing.T) {
+	secretKey := []byte("test-secret-key-min-32-bytes-long!")
+	authService := auth.NewAuthService(secretKey)
+
+	password := "SecurePass123!"
+	passwordHash, err := authService.HashPassword(password)
+	if err != nil {
+		t.Fatalf("setup failed: %v", err)
+	}
+
+	testUser := &auth.User{
+		ID:           uuid.New(),
+		Email:        "test@example.com",
+		PasswordHash: passwordHash,
+		Role:         "admin",
+		IsActive:     true,
+	}
+
+	userByEmail := func(email string) (*auth.User, error) {
+		if email == testUser.Email {
+			return testUser, nil
+		}
+		return nil, nil
+	}
+
+	storeRefreshToken := func(rt *auth.RefreshToken) error {
+		return nil
+	}
+
+	auditLogger := auth.NewInMemoryAuditLogger()
+
+	handler := NewLoginHandler(authService, userByEmail, storeRefreshToken, nil, auditLogger)
+
+	body := map[string]string{"email": testUser.Email, "password": password}
+	bodyBytes, _ := json.Marshal(body)
+	req := httptest.NewRequest("POST", "/auth/login", bytes.NewReader(bodyBytes))
+	req.RemoteAddr = "10.0.0.1:12345"
+	req.Header.Set("User-Agent", "TestAgent/1.0")
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	logs := auditLogger.GetLogs()
+	if len(logs) != 1 {
+		t.Fatalf("expected 1 audit log, got %d", len(logs))
+	}
+
+	entry := logs[0]
+	if entry.EventType != auth.AuditLoginSuccess {
+		t.Errorf("event type = %v, want %v", entry.EventType, auth.AuditLoginSuccess)
+	}
+	if entry.ActorID == nil || *entry.ActorID != testUser.ID {
+		t.Errorf("actor ID = %v, want %v", entry.ActorID, testUser.ID)
+	}
+	if entry.ClientIP != "10.0.0.1" {
+		t.Errorf("client IP = %v, want 10.0.0.1", entry.ClientIP)
+	}
+	if entry.UserAgent != "TestAgent/1.0" {
+		t.Errorf("user agent = %v, want TestAgent/1.0", entry.UserAgent)
+	}
+}
+
+func TestLoginHandler_AuditLogsFailure(t *testing.T) {
+	secretKey := []byte("test-secret-key-min-32-bytes-long!")
+	authService := auth.NewAuthService(secretKey)
+
+	userByEmail := func(email string) (*auth.User, error) {
+		return nil, nil
+	}
+
+	storeRefreshToken := func(rt *auth.RefreshToken) error {
+		return nil
+	}
+
+	auditLogger := auth.NewInMemoryAuditLogger()
+
+	handler := NewLoginHandler(authService, userByEmail, storeRefreshToken, nil, auditLogger)
+
+	body := map[string]string{"email": "unknown@example.com", "password": "AnyPass123!"}
+	bodyBytes, _ := json.Marshal(body)
+	req := httptest.NewRequest("POST", "/auth/login", bytes.NewReader(bodyBytes))
+	req.RemoteAddr = "10.0.0.2:12345"
+	req.Header.Set("User-Agent", "TestAgent/1.0")
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", w.Code)
+	}
+
+	logs := auditLogger.GetLogs()
+	if len(logs) != 1 {
+		t.Fatalf("expected 1 audit log, got %d", len(logs))
+	}
+
+	entry := logs[0]
+	if entry.EventType != auth.AuditLoginFailure {
+		t.Errorf("event type = %v, want %v", entry.EventType, auth.AuditLoginFailure)
+	}
+	if entry.ActorID != nil {
+		t.Errorf("actor ID = %v, want nil (anonymous)", entry.ActorID)
+	}
+	if entry.ClientIP != "10.0.0.2" {
+		t.Errorf("client IP = %v, want 10.0.0.2", entry.ClientIP)
+	}
+	if entry.UserAgent != "TestAgent/1.0" {
+		t.Errorf("user agent = %v, want TestAgent/1.0", entry.UserAgent)
+	}
+}
+
 func TestLoginHandler_ResetsRateLimitOnSuccess(t *testing.T) {
 	secretKey := []byte("test-secret-key-min-32-bytes-long!")
 	authService := auth.NewAuthService(secretKey)
@@ -629,7 +744,7 @@ func TestLoginHandler_ResetsRateLimitOnSuccess(t *testing.T) {
 	rl := auth.NewRateLimiter(time.Hour, time.Hour, 1000)
 	defer rl.Stop()
 
-	handler := NewLoginHandler(authService, userByEmail, storeRefreshToken, rl)
+	handler := NewLoginHandler(authService, userByEmail, storeRefreshToken, rl, nil)
 
 	clientIP := "10.0.0.50"
 

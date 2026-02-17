@@ -30,11 +30,13 @@ type LoginResponse struct {
 
 // NewLoginHandler creates a new login handler.
 // If rateLimiter is non-nil, the rate limit for the client IP is reset on successful login.
+// If auditLogger is non-nil, login attempts (success and failure) are audit-logged.
 func NewLoginHandler(
 	authService *auth.AuthService,
 	userByEmail UserByEmailFunc,
 	storeRefreshToken StoreRefreshTokenFunc,
 	rateLimiter *auth.RateLimiter,
+	auditLogger auth.AuditLogger,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Parse request
@@ -49,6 +51,9 @@ func NewLoginHandler(
 		// Get user by email
 		user, err := userByEmail(req.Email)
 		if err != nil || user == nil {
+			if auditLogger != nil {
+				_ = auditLogger.Log(auth.CreateLoginAuditLog(false, nil, req.Email, middleware.GetClientIP(r), r.UserAgent()))
+			}
 			writeJSON(w, http.StatusUnauthorized, map[string]string{
 				"error": "Invalid credentials",
 			})
@@ -57,6 +62,9 @@ func NewLoginHandler(
 
 		// Check if user is active
 		if !user.IsActive {
+			if auditLogger != nil {
+				_ = auditLogger.Log(auth.CreateLoginAuditLog(false, &user.ID, req.Email, middleware.GetClientIP(r), r.UserAgent()))
+			}
 			writeJSON(w, http.StatusUnauthorized, map[string]string{
 				"error": "Invalid credentials",
 			})
@@ -65,6 +73,9 @@ func NewLoginHandler(
 
 		// Verify password
 		if err := authService.VerifyPassword(user.PasswordHash, req.Password); err != nil {
+			if auditLogger != nil {
+				_ = auditLogger.Log(auth.CreateLoginAuditLog(false, &user.ID, req.Email, middleware.GetClientIP(r), r.UserAgent()))
+			}
 			writeJSON(w, http.StatusUnauthorized, map[string]string{
 				"error": "Invalid credentials",
 			})
@@ -107,6 +118,11 @@ func NewLoginHandler(
 		// Reset rate limit on successful login
 		if rateLimiter != nil {
 			rateLimiter.ResetLimit(middleware.GetClientIP(r))
+		}
+
+		// Audit log successful login
+		if auditLogger != nil {
+			_ = auditLogger.Log(auth.CreateLoginAuditLog(true, &user.ID, req.Email, middleware.GetClientIP(r), r.UserAgent()))
 		}
 
 		// Set refresh token cookie
