@@ -163,6 +163,151 @@ func TestInviteHandler_InvalidEmail(t *testing.T) {
 	}
 }
 
+func TestCanInviteRole(t *testing.T) {
+	tests := []struct {
+		inviter string
+		target  string
+		want    bool
+	}{
+		{"admin", "admin", true},
+		{"admin", "manager", true},
+		{"admin", "viewer", true},
+		{"manager", "admin", false},
+		{"manager", "manager", true},
+		{"manager", "viewer", true},
+		{"viewer", "admin", false},
+		{"viewer", "manager", false},
+		{"viewer", "viewer", true},
+		{"unknown", "viewer", false},
+		{"admin", "unknown", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.inviter+"_invites_"+tt.target, func(t *testing.T) {
+			got := canInviteRole(tt.inviter, tt.target)
+			if got != tt.want {
+				t.Errorf("canInviteRole(%q, %q) = %v, want %v", tt.inviter, tt.target, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestInviteHandler_ManagerCanInviteViewer(t *testing.T) {
+	secretKey := []byte("test-secret-key-min-32-bytes-long!")
+	authService := auth.NewAuthService(secretKey)
+
+	managerUser := &auth.User{
+		ID:    uuid.New(),
+		Email: "manager@example.com",
+		Role:  "manager",
+	}
+
+	storeInvite := func(invite *auth.UserInvite) error {
+		return nil
+	}
+
+	handler := NewInviteHandler(authService, storeInvite)
+
+	body := map[string]string{"email": "new@example.com", "role": "viewer"}
+	bodyBytes, _ := json.Marshal(body)
+	req := httptest.NewRequest("POST", "/users/invite", bytes.NewReader(bodyBytes))
+	req = req.WithContext(contextWithUser(req.Context(), managerUser))
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+}
+
+func TestInviteHandler_ManagerCanInviteManager(t *testing.T) {
+	secretKey := []byte("test-secret-key-min-32-bytes-long!")
+	authService := auth.NewAuthService(secretKey)
+
+	managerUser := &auth.User{
+		ID:    uuid.New(),
+		Email: "manager@example.com",
+		Role:  "manager",
+	}
+
+	storeInvite := func(invite *auth.UserInvite) error {
+		return nil
+	}
+
+	handler := NewInviteHandler(authService, storeInvite)
+
+	body := map[string]string{"email": "new@example.com", "role": "manager"}
+	bodyBytes, _ := json.Marshal(body)
+	req := httptest.NewRequest("POST", "/users/invite", bytes.NewReader(bodyBytes))
+	req = req.WithContext(contextWithUser(req.Context(), managerUser))
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+}
+
+func TestInviteHandler_ManagerCannotInviteAdmin(t *testing.T) {
+	secretKey := []byte("test-secret-key-min-32-bytes-long!")
+	authService := auth.NewAuthService(secretKey)
+
+	managerUser := &auth.User{
+		ID:    uuid.New(),
+		Email: "manager@example.com",
+		Role:  "manager",
+	}
+
+	storeInvite := func(invite *auth.UserInvite) error {
+		return nil
+	}
+
+	handler := NewInviteHandler(authService, storeInvite)
+
+	body := map[string]string{"email": "new@example.com", "role": "admin"}
+	bodyBytes, _ := json.Marshal(body)
+	req := httptest.NewRequest("POST", "/users/invite", bytes.NewReader(bodyBytes))
+	req = req.WithContext(contextWithUser(req.Context(), managerUser))
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Errorf("expected 403, got %d", w.Code)
+	}
+}
+
+func TestInviteHandler_AdminCanInviteAdmin(t *testing.T) {
+	secretKey := []byte("test-secret-key-min-32-bytes-long!")
+	authService := auth.NewAuthService(secretKey)
+
+	adminUser := &auth.User{
+		ID:    uuid.New(),
+		Email: "admin@example.com",
+		Role:  "admin",
+	}
+
+	storeInvite := func(invite *auth.UserInvite) error {
+		return nil
+	}
+
+	handler := NewInviteHandler(authService, storeInvite)
+
+	body := map[string]string{"email": "new@example.com", "role": "admin"}
+	bodyBytes, _ := json.Marshal(body)
+	req := httptest.NewRequest("POST", "/users/invite", bytes.NewReader(bodyBytes))
+	req = req.WithContext(contextWithUser(req.Context(), adminUser))
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+}
+
 // RED: Test accepting invite with valid token
 func TestAcceptInviteHandler_ValidToken(t *testing.T) {
 	// Setup

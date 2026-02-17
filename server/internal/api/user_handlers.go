@@ -31,6 +31,28 @@ type InviteResponse struct {
 
 var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
 
+// canInviteRole checks if the inviter's role is allowed to grant the target role.
+// Users can only invite at their own level or below.
+func canInviteRole(inviterRole, targetRole string) bool {
+	roleLevel := map[string]int{
+		"viewer":  1,
+		"manager": 2,
+		"admin":   3,
+	}
+
+	inviterLevel, ok := roleLevel[inviterRole]
+	if !ok {
+		return false
+	}
+
+	targetLevel, ok := roleLevel[targetRole]
+	if !ok {
+		return false
+	}
+
+	return inviterLevel >= targetLevel
+}
+
 // NewInviteHandler creates a new invite handler
 func NewInviteHandler(
 	authService *auth.AuthService,
@@ -73,6 +95,14 @@ func NewInviteHandler(
 		if !validRoles[req.Role] {
 			writeJSON(w, http.StatusBadRequest, map[string]string{
 				"error": "Invalid role. Must be viewer, manager, or admin",
+			})
+			return
+		}
+
+		// Check role hierarchy — inviter can only grant same level or below
+		if !canInviteRole(user.Role, req.Role) {
+			writeJSON(w, http.StatusForbidden, map[string]string{
+				"error": "Insufficient permissions to invite this role",
 			})
 			return
 		}
