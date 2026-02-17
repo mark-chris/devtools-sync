@@ -48,7 +48,7 @@ func TestLoginHandler_ValidCredentials(t *testing.T) {
 		return nil
 	}
 
-	handler := NewLoginHandler(authService, userByEmail, storeRefreshToken)
+	handler := NewLoginHandler(authService, userByEmail, storeRefreshToken, nil)
 
 	// Create request
 	body := map[string]string{
@@ -155,7 +155,7 @@ func TestLoginHandler_InvalidCredentials(t *testing.T) {
 		return nil
 	}
 
-	handler := NewLoginHandler(authService, userByEmail, storeRefreshToken)
+	handler := NewLoginHandler(authService, userByEmail, storeRefreshToken, nil)
 
 	body := map[string]string{
 		"email":    testUser.Email,
@@ -203,7 +203,7 @@ func TestLoginHandler_InactiveUser(t *testing.T) {
 		return nil
 	}
 
-	handler := NewLoginHandler(authService, userByEmail, storeRefreshToken)
+	handler := NewLoginHandler(authService, userByEmail, storeRefreshToken, nil)
 
 	body := map[string]string{
 		"email":    testUser.Email,
@@ -237,7 +237,7 @@ func TestLoginHandler_UserNotFound(t *testing.T) {
 		return nil
 	}
 
-	handler := NewLoginHandler(authService, userByEmail, storeRefreshToken)
+	handler := NewLoginHandler(authService, userByEmail, storeRefreshToken, nil)
 
 	body := map[string]string{
 		"email":    "nonexistent@example.com",
@@ -271,7 +271,7 @@ func TestLoginHandler_MalformedJSON(t *testing.T) {
 		return nil
 	}
 
-	handler := NewLoginHandler(authService, userByEmail, storeRefreshToken)
+	handler := NewLoginHandler(authService, userByEmail, storeRefreshToken, nil)
 
 	req := httptest.NewRequest("POST", "/auth/login", bytes.NewReader([]byte("invalid json")))
 	req.Header.Set("Content-Type", "application/json")
@@ -594,5 +594,71 @@ func TestLogoutHandler_MissingCookie(t *testing.T) {
 	// Assert - should still return 200 (idempotent)
 	if w.Code != http.StatusOK {
 		t.Errorf("response code = %d, want %d (logout is idempotent)", w.Code, http.StatusOK)
+	}
+}
+
+func TestLoginHandler_ResetsRateLimitOnSuccess(t *testing.T) {
+	secretKey := []byte("test-secret-key-min-32-bytes-long!")
+	authService := auth.NewAuthService(secretKey)
+
+	password := "SecurePass123!"
+	passwordHash, err := authService.HashPassword(password)
+	if err != nil {
+		t.Fatalf("setup failed: %v", err)
+	}
+
+	testUser := &auth.User{
+		ID:           uuid.New(),
+		Email:        "test@example.com",
+		PasswordHash: passwordHash,
+		Role:         "admin",
+		IsActive:     true,
+	}
+
+	userByEmail := func(email string) (*auth.User, error) {
+		if email == testUser.Email {
+			return testUser, nil
+		}
+		return nil, nil
+	}
+
+	storeRefreshToken := func(rt *auth.RefreshToken) error {
+		return nil
+	}
+
+	rl := auth.NewRateLimiter(time.Hour, time.Hour, 1000)
+	defer rl.Stop()
+
+	handler := NewLoginHandler(authService, userByEmail, storeRefreshToken, rl)
+
+	clientIP := "10.0.0.50"
+
+	// Use up rate limit attempts (limit is enforced by middleware, but
+	// we manually add attempts to verify reset clears them)
+	for i := 0; i < 4; i++ {
+		_ = rl.CheckLimit(clientIP, 5, 15*time.Minute)
+	}
+
+	// Successful login should reset the rate limit for this IP
+	body := map[string]string{
+		"email":    testUser.Email,
+		"password": password,
+	}
+	bodyBytes, _ := json.Marshal(body)
+	req := httptest.NewRequest("POST", "/auth/login", bytes.NewReader(bodyBytes))
+	req.RemoteAddr = clientIP + ":12345"
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	// After reset, should be able to use the full limit again
+	for i := 0; i < 5; i++ {
+		if err := rl.CheckLimit(clientIP, 5, 15*time.Minute); err != nil {
+			t.Errorf("attempt %d after reset should succeed: %v", i+1, err)
+		}
 	}
 }
