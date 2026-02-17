@@ -36,7 +36,7 @@ func TestInviteHandler_AsAdmin(t *testing.T) {
 		return nil
 	}
 
-	handler := NewInviteHandler(authService, storeInvite)
+	handler := NewInviteHandler(authService, storeInvite, nil)
 
 	body := map[string]string{
 		"email": "newuser@example.com",
@@ -103,7 +103,7 @@ func TestInviteHandler_InvalidRole(t *testing.T) {
 		return nil
 	}
 
-	handler := NewInviteHandler(authService, storeInvite)
+	handler := NewInviteHandler(authService, storeInvite, nil)
 
 	body := map[string]string{
 		"email": "newuser@example.com",
@@ -141,7 +141,7 @@ func TestInviteHandler_InvalidEmail(t *testing.T) {
 		return nil
 	}
 
-	handler := NewInviteHandler(authService, storeInvite)
+	handler := NewInviteHandler(authService, storeInvite, nil)
 
 	body := map[string]string{
 		"email": "invalid-email", // Invalid email
@@ -206,7 +206,7 @@ func TestInviteHandler_ManagerCanInviteViewer(t *testing.T) {
 		return nil
 	}
 
-	handler := NewInviteHandler(authService, storeInvite)
+	handler := NewInviteHandler(authService, storeInvite, nil)
 
 	body := map[string]string{"email": "new@example.com", "role": "viewer"}
 	bodyBytes, _ := json.Marshal(body)
@@ -235,7 +235,7 @@ func TestInviteHandler_ManagerCanInviteManager(t *testing.T) {
 		return nil
 	}
 
-	handler := NewInviteHandler(authService, storeInvite)
+	handler := NewInviteHandler(authService, storeInvite, nil)
 
 	body := map[string]string{"email": "new@example.com", "role": "manager"}
 	bodyBytes, _ := json.Marshal(body)
@@ -264,7 +264,7 @@ func TestInviteHandler_ManagerCannotInviteAdmin(t *testing.T) {
 		return nil
 	}
 
-	handler := NewInviteHandler(authService, storeInvite)
+	handler := NewInviteHandler(authService, storeInvite, nil)
 
 	body := map[string]string{"email": "new@example.com", "role": "admin"}
 	bodyBytes, _ := json.Marshal(body)
@@ -293,7 +293,7 @@ func TestInviteHandler_AdminCanInviteAdmin(t *testing.T) {
 		return nil
 	}
 
-	handler := NewInviteHandler(authService, storeInvite)
+	handler := NewInviteHandler(authService, storeInvite, nil)
 
 	body := map[string]string{"email": "new@example.com", "role": "admin"}
 	bodyBytes, _ := json.Marshal(body)
@@ -305,6 +305,64 @@ func TestInviteHandler_AdminCanInviteAdmin(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", w.Code)
+	}
+}
+
+func TestInviteHandler_AuditLogsCreation(t *testing.T) {
+	secretKey := []byte("test-secret-key-min-32-bytes-long!")
+	authService := auth.NewAuthService(secretKey)
+
+	adminUser := &auth.User{
+		ID:    uuid.New(),
+		Email: "admin@example.com",
+		Role:  "admin",
+	}
+
+	storeInvite := func(invite *auth.UserInvite) error {
+		return nil
+	}
+
+	auditLogger := auth.NewInMemoryAuditLogger()
+
+	handler := NewInviteHandler(authService, storeInvite, auditLogger)
+
+	body := map[string]string{"email": "new@example.com", "role": "viewer"}
+	bodyBytes, _ := json.Marshal(body)
+	req := httptest.NewRequest("POST", "/users/invite", bytes.NewReader(bodyBytes))
+	req = req.WithContext(contextWithUser(req.Context(), adminUser))
+	req.RemoteAddr = "10.0.0.1:12345"
+	req.Header.Set("User-Agent", "TestAgent/1.0")
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	logs := auditLogger.GetLogs()
+	if len(logs) != 1 {
+		t.Fatalf("expected 1 audit log, got %d", len(logs))
+	}
+
+	entry := logs[0]
+	if entry.EventType != auth.AuditInviteCreated {
+		t.Errorf("event type = %v, want %v", entry.EventType, auth.AuditInviteCreated)
+	}
+	if entry.ActorID == nil || *entry.ActorID != adminUser.ID {
+		t.Errorf("actor ID = %v, want %v", entry.ActorID, adminUser.ID)
+	}
+	if entry.Details["email"] != "new@example.com" {
+		t.Errorf("details email = %v, want new@example.com", entry.Details["email"])
+	}
+	if entry.Details["role"] != "viewer" {
+		t.Errorf("details role = %v, want viewer", entry.Details["role"])
+	}
+	if entry.ClientIP != "10.0.0.1" {
+		t.Errorf("client IP = %v, want 10.0.0.1", entry.ClientIP)
+	}
+	if entry.UserAgent != "TestAgent/1.0" {
+		t.Errorf("user agent = %v, want TestAgent/1.0", entry.UserAgent)
 	}
 }
 

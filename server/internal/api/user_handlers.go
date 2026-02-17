@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/mark-chris/devtools-sync/server/internal/auth"
+	"github.com/mark-chris/devtools-sync/server/internal/middleware"
 )
 
 // contextKey is a custom type for context keys to avoid collisions
@@ -53,10 +54,12 @@ func canInviteRole(inviterRole, targetRole string) bool {
 	return inviterLevel >= targetLevel
 }
 
-// NewInviteHandler creates a new invite handler
+// NewInviteHandler creates a new invite handler.
+// If auditLogger is non-nil, invite creation events are audit-logged.
 func NewInviteHandler(
 	authService *auth.AuthService,
 	storeInvite StoreInviteFunc,
+	auditLogger auth.AuditLogger,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Get user from context (set by RequireAuth middleware)
@@ -133,6 +136,14 @@ func NewInviteHandler(
 				"error": "Failed to store invite",
 			})
 			return
+		}
+
+		// Audit log
+		if auditLogger != nil {
+			logEntry := auth.CreateInviteAuditLog(user.ID, invite.ID, req.Email, req.Role)
+			logEntry.ClientIP = middleware.GetClientIP(r)
+			logEntry.UserAgent = r.UserAgent()
+			_ = auditLogger.Log(logEntry)
 		}
 
 		// Generate invite URL
