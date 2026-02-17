@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/mark-chris/devtools-sync/server/internal/auth"
+	"github.com/mark-chris/devtools-sync/server/internal/middleware"
 )
 
 // contextKey is a custom type for context keys to avoid collisions
@@ -53,10 +54,12 @@ func canInviteRole(inviterRole, targetRole string) bool {
 	return inviterLevel >= targetLevel
 }
 
-// NewInviteHandler creates a new invite handler
+// NewInviteHandler creates a new invite handler.
+// If auditLogger is non-nil, invite creation events are audit-logged.
 func NewInviteHandler(
 	authService *auth.AuthService,
 	storeInvite StoreInviteFunc,
+	auditLogger auth.AuditLogger,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Get user from context (set by RequireAuth middleware)
@@ -135,6 +138,14 @@ func NewInviteHandler(
 			return
 		}
 
+		// Audit log
+		if auditLogger != nil {
+			logEntry := auth.CreateInviteAuditLog(user.ID, invite.ID, req.Email, req.Role)
+			logEntry.ClientIP = middleware.GetClientIP(r)
+			logEntry.UserAgent = r.UserAgent()
+			_ = auditLogger.Log(logEntry)
+		}
+
 		// Generate invite URL
 		inviteURL := "https://app.example.com/accept-invite?token=" + inviteToken
 
@@ -165,12 +176,14 @@ type AcceptInviteResponse struct {
 	Message string `json:"message"`
 }
 
-// NewAcceptInviteHandler creates a new accept invite handler
+// NewAcceptInviteHandler creates a new accept invite handler.
+// If auditLogger is non-nil, invite acceptance events are audit-logged.
 func NewAcceptInviteHandler(
 	authService *auth.AuthService,
 	getInviteByToken GetInviteByTokenFunc,
 	createUser CreateUserFunc,
 	markInviteAccepted MarkInviteAcceptedFunc,
+	auditLogger auth.AuditLogger,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Parse request
@@ -250,6 +263,22 @@ func NewAcceptInviteHandler(
 		// Mark invite as accepted
 		invite.AcceptedAt = &now
 		_ = markInviteAccepted(invite) // Ignore error - user already created, invite update is best-effort
+
+		// Audit log
+		if auditLogger != nil {
+			_ = auditLogger.Log(&auth.AuditLog{
+				EventType:  auth.AuditInviteAccepted,
+				ActorType:  auth.ActorTypeUser,
+				ActorID:    &user.ID,
+				TargetType: "user",
+				TargetID:   &user.ID,
+				Details: map[string]interface{}{
+					"email": user.Email,
+				},
+				ClientIP:  middleware.GetClientIP(r),
+				UserAgent: r.UserAgent(),
+			})
+		}
 
 		writeJSON(w, http.StatusOK, AcceptInviteResponse{
 			Message: "Account created successfully",

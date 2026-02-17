@@ -30,11 +30,13 @@ type LoginResponse struct {
 
 // NewLoginHandler creates a new login handler.
 // If rateLimiter is non-nil, the rate limit for the client IP is reset on successful login.
+// If auditLogger is non-nil, login attempts (success and failure) are audit-logged.
 func NewLoginHandler(
 	authService *auth.AuthService,
 	userByEmail UserByEmailFunc,
 	storeRefreshToken StoreRefreshTokenFunc,
 	rateLimiter *auth.RateLimiter,
+	auditLogger auth.AuditLogger,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Parse request
@@ -49,6 +51,9 @@ func NewLoginHandler(
 		// Get user by email
 		user, err := userByEmail(req.Email)
 		if err != nil || user == nil {
+			if auditLogger != nil {
+				_ = auditLogger.Log(auth.CreateLoginAuditLog(false, nil, req.Email, middleware.GetClientIP(r), r.UserAgent()))
+			}
 			writeJSON(w, http.StatusUnauthorized, map[string]string{
 				"error": "Invalid credentials",
 			})
@@ -57,6 +62,9 @@ func NewLoginHandler(
 
 		// Check if user is active
 		if !user.IsActive {
+			if auditLogger != nil {
+				_ = auditLogger.Log(auth.CreateLoginAuditLog(false, &user.ID, req.Email, middleware.GetClientIP(r), r.UserAgent()))
+			}
 			writeJSON(w, http.StatusUnauthorized, map[string]string{
 				"error": "Invalid credentials",
 			})
@@ -65,6 +73,9 @@ func NewLoginHandler(
 
 		// Verify password
 		if err := authService.VerifyPassword(user.PasswordHash, req.Password); err != nil {
+			if auditLogger != nil {
+				_ = auditLogger.Log(auth.CreateLoginAuditLog(false, &user.ID, req.Email, middleware.GetClientIP(r), r.UserAgent()))
+			}
 			writeJSON(w, http.StatusUnauthorized, map[string]string{
 				"error": "Invalid credentials",
 			})
@@ -109,6 +120,11 @@ func NewLoginHandler(
 			rateLimiter.ResetLimit(middleware.GetClientIP(r))
 		}
 
+		// Audit log successful login
+		if auditLogger != nil {
+			_ = auditLogger.Log(auth.CreateLoginAuditLog(true, &user.ID, req.Email, middleware.GetClientIP(r), r.UserAgent()))
+		}
+
 		// Set refresh token cookie
 		http.SetCookie(w, &http.Cookie{
 			Name:     "refresh_token",
@@ -139,17 +155,28 @@ type GetUserByIDFunc func(userID string) (*auth.User, error)
 // UpdateRefreshTokenFunc is a function that updates a refresh token
 type UpdateRefreshTokenFunc func(rt *auth.RefreshToken) error
 
-// NewRefreshHandler creates a new refresh token handler
+// NewRefreshHandler creates a new refresh token handler.
+// If auditLogger is non-nil, refresh attempts (success and failure) are audit-logged.
 func NewRefreshHandler(
 	authService *auth.AuthService,
 	getRefreshToken GetRefreshTokenFunc,
 	getUserByID GetUserByIDFunc,
 	updateRefreshToken UpdateRefreshTokenFunc,
+	auditLogger auth.AuditLogger,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Get refresh token from cookie
 		cookie, err := r.Cookie("refresh_token")
 		if err != nil {
+			if auditLogger != nil {
+				_ = auditLogger.Log(&auth.AuditLog{
+					EventType: auth.AuditRefreshFailure,
+					ActorType: auth.ActorTypeUser,
+					Details:   map[string]interface{}{"reason": "missing_cookie"},
+					ClientIP:  middleware.GetClientIP(r),
+					UserAgent: r.UserAgent(),
+				})
+			}
 			writeJSON(w, http.StatusUnauthorized, map[string]string{
 				"error": "Missing refresh token",
 			})
@@ -162,6 +189,15 @@ func NewRefreshHandler(
 		// Get token from database
 		storedToken, err := getRefreshToken(tokenHash)
 		if err != nil || storedToken == nil {
+			if auditLogger != nil {
+				_ = auditLogger.Log(&auth.AuditLog{
+					EventType: auth.AuditRefreshFailure,
+					ActorType: auth.ActorTypeUser,
+					Details:   map[string]interface{}{"reason": "invalid_token"},
+					ClientIP:  middleware.GetClientIP(r),
+					UserAgent: r.UserAgent(),
+				})
+			}
 			writeJSON(w, http.StatusUnauthorized, map[string]string{
 				"error": "Invalid refresh token",
 			})
@@ -170,6 +206,15 @@ func NewRefreshHandler(
 
 		// Check if token is revoked
 		if storedToken.RevokedAt != nil {
+			if auditLogger != nil {
+				_ = auditLogger.Log(&auth.AuditLog{
+					EventType: auth.AuditRefreshFailure,
+					ActorType: auth.ActorTypeUser,
+					Details:   map[string]interface{}{"reason": "revoked_token"},
+					ClientIP:  middleware.GetClientIP(r),
+					UserAgent: r.UserAgent(),
+				})
+			}
 			writeJSON(w, http.StatusUnauthorized, map[string]string{
 				"error": "Invalid refresh token",
 			})
@@ -178,6 +223,15 @@ func NewRefreshHandler(
 
 		// Check if token is expired
 		if time.Now().After(storedToken.ExpiresAt) {
+			if auditLogger != nil {
+				_ = auditLogger.Log(&auth.AuditLog{
+					EventType: auth.AuditRefreshFailure,
+					ActorType: auth.ActorTypeUser,
+					Details:   map[string]interface{}{"reason": "expired_token"},
+					ClientIP:  middleware.GetClientIP(r),
+					UserAgent: r.UserAgent(),
+				})
+			}
 			writeJSON(w, http.StatusUnauthorized, map[string]string{
 				"error": "Invalid refresh token",
 			})
@@ -187,6 +241,15 @@ func NewRefreshHandler(
 		// Get user
 		user, err := getUserByID(storedToken.UserID.String())
 		if err != nil || user == nil {
+			if auditLogger != nil {
+				_ = auditLogger.Log(&auth.AuditLog{
+					EventType: auth.AuditRefreshFailure,
+					ActorType: auth.ActorTypeUser,
+					Details:   map[string]interface{}{"reason": "user_not_found"},
+					ClientIP:  middleware.GetClientIP(r),
+					UserAgent: r.UserAgent(),
+				})
+			}
 			writeJSON(w, http.StatusUnauthorized, map[string]string{
 				"error": "User not found",
 			})
@@ -195,6 +258,15 @@ func NewRefreshHandler(
 
 		// Check if user is active
 		if !user.IsActive {
+			if auditLogger != nil {
+				_ = auditLogger.Log(&auth.AuditLog{
+					EventType: auth.AuditRefreshFailure,
+					ActorType: auth.ActorTypeUser,
+					Details:   map[string]interface{}{"reason": "user_inactive"},
+					ClientIP:  middleware.GetClientIP(r),
+					UserAgent: r.UserAgent(),
+				})
+			}
 			writeJSON(w, http.StatusUnauthorized, map[string]string{
 				"error": "User not found or inactive",
 			})
@@ -215,6 +287,18 @@ func NewRefreshHandler(
 		storedToken.LastUsedAt = &now
 		_ = updateRefreshToken(storedToken) // Ignore error - don't fail request if update fails
 
+		// Audit log successful refresh
+		if auditLogger != nil {
+			_ = auditLogger.Log(&auth.AuditLog{
+				EventType: auth.AuditRefreshSuccess,
+				ActorType: auth.ActorTypeUser,
+				ActorID:   &user.ID,
+				Details:   map[string]interface{}{},
+				ClientIP:  middleware.GetClientIP(r),
+				UserAgent: r.UserAgent(),
+			})
+		}
+
 		// Return new access token
 		writeJSON(w, http.StatusOK, LoginResponse{
 			AccessToken: accessToken,
@@ -227,11 +311,13 @@ func NewRefreshHandler(
 // RevokeRefreshTokenFunc is a function that revokes a refresh token
 type RevokeRefreshTokenFunc func(rt *auth.RefreshToken) error
 
-// NewLogoutHandler creates a new logout handler
+// NewLogoutHandler creates a new logout handler.
+// If auditLogger is non-nil, logout events are audit-logged.
 func NewLogoutHandler(
 	authService *auth.AuthService,
 	getRefreshToken GetRefreshTokenFunc,
 	revokeRefreshToken RevokeRefreshTokenFunc,
+	auditLogger auth.AuditLogger,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Get refresh token from cookie
@@ -255,6 +341,17 @@ func NewLogoutHandler(
 			now := time.Now()
 			storedToken.RevokedAt = &now
 			_ = revokeRefreshToken(storedToken) // Ignore error - logout is idempotent
+
+			if auditLogger != nil {
+				_ = auditLogger.Log(&auth.AuditLog{
+					EventType: auth.AuditLogout,
+					ActorType: auth.ActorTypeUser,
+					ActorID:   &storedToken.UserID,
+					Details:   map[string]interface{}{},
+					ClientIP:  middleware.GetClientIP(r),
+					UserAgent: r.UserAgent(),
+				})
+			}
 		}
 
 		// Clear cookie regardless of token validity (idempotent)
