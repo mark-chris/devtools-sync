@@ -330,7 +330,7 @@ func TestRefreshHandler_ValidToken(t *testing.T) {
 		return nil
 	}
 
-	handler := NewRefreshHandler(authService, getRefreshToken, getUserByID, updateRefreshToken)
+	handler := NewRefreshHandler(authService, getRefreshToken, getUserByID, updateRefreshToken, nil)
 
 	req := httptest.NewRequest("POST", "/auth/refresh", nil)
 	req.AddCookie(&http.Cookie{
@@ -386,7 +386,7 @@ func TestRefreshHandler_MissingCookie(t *testing.T) {
 		return nil
 	}
 
-	handler := NewRefreshHandler(authService, getRefreshToken, getUserByID, updateRefreshToken)
+	handler := NewRefreshHandler(authService, getRefreshToken, getUserByID, updateRefreshToken, nil)
 
 	req := httptest.NewRequest("POST", "/auth/refresh", nil)
 	w := httptest.NewRecorder()
@@ -428,7 +428,7 @@ func TestRefreshHandler_ExpiredToken(t *testing.T) {
 		return nil
 	}
 
-	handler := NewRefreshHandler(authService, getRefreshToken, getUserByID, updateRefreshToken)
+	handler := NewRefreshHandler(authService, getRefreshToken, getUserByID, updateRefreshToken, nil)
 
 	req := httptest.NewRequest("POST", "/auth/refresh", nil)
 	req.AddCookie(&http.Cookie{
@@ -476,7 +476,7 @@ func TestRefreshHandler_RevokedToken(t *testing.T) {
 		return nil
 	}
 
-	handler := NewRefreshHandler(authService, getRefreshToken, getUserByID, updateRefreshToken)
+	handler := NewRefreshHandler(authService, getRefreshToken, getUserByID, updateRefreshToken, nil)
 
 	req := httptest.NewRequest("POST", "/auth/refresh", nil)
 	req.AddCookie(&http.Cookie{
@@ -706,6 +706,81 @@ func TestLoginHandler_AuditLogsFailure(t *testing.T) {
 	}
 	if entry.ClientIP != "10.0.0.2" {
 		t.Errorf("client IP = %v, want 10.0.0.2", entry.ClientIP)
+	}
+	if entry.UserAgent != "TestAgent/1.0" {
+		t.Errorf("user agent = %v, want TestAgent/1.0", entry.UserAgent)
+	}
+}
+
+func TestRefreshHandler_AuditLogsSuccess(t *testing.T) {
+	secretKey := []byte("test-secret-key-min-32-bytes-long!")
+	authService := auth.NewAuthService(secretKey)
+
+	testUser := &auth.User{
+		ID:       uuid.New(),
+		Email:    "test@example.com",
+		Role:     "admin",
+		IsActive: true,
+	}
+
+	refreshToken, _ := authService.GenerateRefreshToken()
+	tokenHash := authService.HashToken(refreshToken)
+
+	storedToken := &auth.RefreshToken{
+		UserID:    testUser.ID,
+		TokenHash: tokenHash,
+		ExpiresAt: time.Now().Add(7 * 24 * time.Hour),
+		CreatedAt: time.Now(),
+	}
+
+	getRefreshToken := func(tokenHash string) (*auth.RefreshToken, error) {
+		if tokenHash == storedToken.TokenHash {
+			return storedToken, nil
+		}
+		return nil, nil
+	}
+
+	getUserByID := func(userID string) (*auth.User, error) {
+		if userID == testUser.ID.String() {
+			return testUser, nil
+		}
+		return nil, nil
+	}
+
+	updateRefreshToken := func(rt *auth.RefreshToken) error {
+		return nil
+	}
+
+	auditLogger := auth.NewInMemoryAuditLogger()
+
+	handler := NewRefreshHandler(authService, getRefreshToken, getUserByID, updateRefreshToken, auditLogger)
+
+	req := httptest.NewRequest("POST", "/auth/refresh", nil)
+	req.AddCookie(&http.Cookie{Name: "refresh_token", Value: refreshToken})
+	req.RemoteAddr = "10.0.0.1:12345"
+	req.Header.Set("User-Agent", "TestAgent/1.0")
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	logs := auditLogger.GetLogs()
+	if len(logs) != 1 {
+		t.Fatalf("expected 1 audit log, got %d", len(logs))
+	}
+
+	entry := logs[0]
+	if entry.EventType != auth.AuditRefreshSuccess {
+		t.Errorf("event type = %v, want %v", entry.EventType, auth.AuditRefreshSuccess)
+	}
+	if entry.ActorID == nil || *entry.ActorID != testUser.ID {
+		t.Errorf("actor ID = %v, want %v", entry.ActorID, testUser.ID)
+	}
+	if entry.ClientIP != "10.0.0.1" {
+		t.Errorf("client IP = %v, want 10.0.0.1", entry.ClientIP)
 	}
 	if entry.UserAgent != "TestAgent/1.0" {
 		t.Errorf("user agent = %v, want TestAgent/1.0", entry.UserAgent)
