@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/mark-chris/devtools-sync/server/internal/auth"
 	"github.com/mark-chris/devtools-sync/server/internal/database"
@@ -37,6 +38,8 @@ func main() {
 	maxBodySize := parseMaxBodySize(os.Getenv("MAX_BODY_SIZE"))
 	log.Printf("Request body size limit: %d bytes (%.2f MB)", maxBodySize, float64(maxBodySize)/(1024*1024))
 
+	corsOrigins := parseCORSOrigins(os.Getenv("CORS_ALLOWED_ORIGINS"))
+
 	port := os.Getenv("SERVER_PORT")
 	if port == "" {
 		port = "8080"
@@ -46,14 +49,17 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", healthHandler)
 
-	// Apply body size limit middleware to all requests
-	handler := middleware.MaxBodySize(maxBodySize)(mux)
+	// Apply CORS and body size limit middleware to all requests
+	handler := middleware.CORS(corsOrigins)(middleware.MaxBodySize(maxBodySize)(mux))
 
 	mode := "production"
 	if isDev {
 		mode = "development"
 	}
 	log.Printf("Server starting in %s mode on port %s", mode, port)
+	if len(corsOrigins) > 0 {
+		log.Printf("CORS allowed origins: %v", corsOrigins)
+	}
 	log.Printf("Health endpoint: http://localhost:%s/health", port)
 
 	// nosemgrep: go.lang.security.audit.net.use-tls.use-tls -- TLS termination handled by reverse proxy in production
@@ -108,4 +114,21 @@ func parseMaxBodySize(value string) int64 {
 	}
 
 	return num * multiplier
+}
+
+// parseCORSOrigins parses the CORS_ALLOWED_ORIGINS environment variable.
+// Returns a slice of origin strings. Empty input returns nil.
+func parseCORSOrigins(value string) []string {
+	if value == "" {
+		return nil
+	}
+	parts := strings.Split(value, ",")
+	origins := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			origins = append(origins, p)
+		}
+	}
+	return origins
 }
