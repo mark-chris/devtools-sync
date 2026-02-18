@@ -131,3 +131,43 @@ func TestParseMaxBodySize_EdgeCases(t *testing.T) {
 		})
 	}
 }
+
+func TestParseCORSOrigins_Empty(t *testing.T) {
+	result := parseCORSOrigins("")
+	if len(result) != 0 {
+		t.Errorf("Expected empty slice, got %v", result)
+	}
+}
+
+func TestParseCORSOrigins_Single(t *testing.T) {
+	result := parseCORSOrigins("http://localhost:5173")
+	if len(result) != 1 || result[0] != "http://localhost:5173" {
+		t.Errorf("Expected [http://localhost:5173], got %v", result)
+	}
+}
+
+func TestParseCORSOrigins_Multiple(t *testing.T) {
+	result := parseCORSOrigins("http://localhost:5173,https://dashboard.example.com")
+	if len(result) != 2 {
+		t.Fatalf("Expected 2 origins, got %d", len(result))
+	}
+	if result[0] != "http://localhost:5173" {
+		t.Errorf("Expected first origin 'http://localhost:5173', got %q", result[0])
+	}
+	if result[1] != "https://dashboard.example.com" {
+		t.Errorf("Expected second origin 'https://dashboard.example.com', got %q", result[1])
+	}
+}
+
+func TestParseCORSOrigins_WhitespaceHandling(t *testing.T) {
+	result := parseCORSOrigins(" http://localhost:5173 , https://dashboard.example.com ")
+	if len(result) != 2 {
+		t.Fatalf("Expected 2 origins, got %d", len(result))
+	}
+	if result[0] != "http://localhost:5173" {
+		t.Errorf("Expected trimmed first origin, got %q", result[0])
+	}
+	if result[1] != "https://dashboard.example.com" {
+		t.Errorf("Expected trimmed second origin, got %q", result[1])
+	}
+}
