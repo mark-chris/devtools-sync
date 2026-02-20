@@ -1,6 +1,6 @@
 module github.com/mark-chris/devtools-sync/server
 
-go 1.24.0
+go 1.24.13
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
