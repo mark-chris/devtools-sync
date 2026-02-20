@@ -1,6 +1,6 @@
 module github.com/mark-chris/devtools-sync/agent
 
-go 1.24.0
+go 1.24.13
 
 require (
 	github.com/spf13/cobra v1.10.2

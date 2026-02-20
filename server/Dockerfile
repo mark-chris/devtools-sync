@@ -3,7 +3,7 @@
 # Updated: 2026-02-03 - Rebuild with golang.org/x/crypto v0.47.0 security fixes
 
 # Build stage
-FROM golang:1.24-alpine AS builder
+FROM golang:1.24.13-alpine AS builder
 
 WORKDIR /build
 

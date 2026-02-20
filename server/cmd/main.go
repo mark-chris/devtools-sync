@@ -1,12 +1,17 @@
 package main
 
 import (
+	"context"
+	"crypto/tls"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/mark-chris/devtools-sync/server/internal/auth"
 	"github.com/mark-chris/devtools-sync/server/internal/database"
@@ -45,6 +50,15 @@ func main() {
 		port = "8080"
 	}
 
+	// Parse TLS configuration
+	tlsEnabled := os.Getenv("TLS_ENABLED") == "true"
+	tlsCfg, certFile, keyFile := loadTLSConfig(
+		tlsEnabled,
+		os.Getenv("TLS_CERT_FILE"),
+		os.Getenv("TLS_KEY_FILE"),
+		os.Getenv("TLS_MIN_VERSION"),
+	)
+
 	// Create mux and register handlers
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", healthHandler)
@@ -52,19 +66,101 @@ func main() {
 	// Apply CORS and body size limit middleware to all requests
 	handler := middleware.CORS(corsOrigins)(middleware.MaxBodySize(maxBodySize)(mux))
 
+	// Create server with timeouts
+	srv := &http.Server{
+		Addr:              ":" + port,
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+
+	if tlsCfg != nil {
+		srv.TLSConfig = tlsCfg
+	}
+
 	mode := "production"
 	if isDev {
 		mode = "development"
 	}
+	scheme := "http"
+	if tlsEnabled {
+		scheme = "https"
+	}
 	log.Printf("Server starting in %s mode on port %s", mode, port)
+	if tlsEnabled {
+		log.Printf("TLS enabled (min version: %s)", os.Getenv("TLS_MIN_VERSION"))
+	}
 	if len(corsOrigins) > 0 {
 		log.Printf("CORS allowed origins: %v", corsOrigins)
 	}
-	log.Printf("Health endpoint: http://localhost:%s/health", port)
+	log.Printf("Health endpoint: %s://localhost:%s/health", scheme, port)
 
-	// nosemgrep: go.lang.security.audit.net.use-tls.use-tls -- TLS termination handled by reverse proxy in production
-	if err := http.ListenAndServe(":"+port, handler); err != nil {
-		log.Fatal(err)
+	// Start server in a goroutine
+	go func() {
+		var err error
+		if tlsEnabled {
+			err = srv.ListenAndServeTLS(certFile, keyFile)
+		} else {
+			err = srv.ListenAndServe()
+		}
+		if err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Server failed: %v", err)
+		}
+	}()
+
+	// Wait for interrupt signal for graceful shutdown
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	log.Println("Shutting down server...")
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatalf("Server forced to shutdown: %v", err)
+	}
+	log.Println("Server stopped")
+}
+
+// loadTLSConfig validates TLS configuration and returns the tls.Config,
+// cert file path, and key file path. Returns nil config if TLS is disabled.
+func loadTLSConfig(enabled bool, certFile, keyFile, minVersion string) (*tls.Config, string, string) {
+	if !enabled {
+		return nil, "", ""
+	}
+
+	if certFile == "" {
+		log.Fatal("TLS_CERT_FILE is required when TLS_ENABLED=true")
+	}
+	if keyFile == "" {
+		log.Fatal("TLS_KEY_FILE is required when TLS_ENABLED=true")
+	}
+
+	if _, err := os.Stat(certFile); os.IsNotExist(err) {
+		log.Fatalf("TLS certificate file not found: %s", certFile)
+	}
+	if _, err := os.Stat(keyFile); os.IsNotExist(err) {
+		log.Fatalf("TLS key file not found: %s", keyFile)
+	}
+
+	return &tls.Config{
+		MinVersion: parseTLSMinVersion(minVersion),
+	}, certFile, keyFile
+}
+
+// parseTLSMinVersion parses the TLS_MIN_VERSION environment variable.
+// Accepts "1.2" or "1.3". Defaults to TLS 1.2.
+func parseTLSMinVersion(value string) uint16 {
+	switch value {
+	case "", "1.2":
+		return tls.VersionTLS12
+	case "1.3":
+		return tls.VersionTLS13
+	default:
+		log.Fatalf("Invalid TLS_MIN_VERSION %q: must be \"1.2\" or \"1.3\"", value)
+		return 0 // unreachable
 	}
 }
 
