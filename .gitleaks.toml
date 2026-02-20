@@ -1,0 +1,4 @@
+[allowlist]
+  description = "Known false positives"
+  # Plan doc contained example PEM key and JWT_SECRET for documentation purposes
+  commits = ["760b68170750624810e2ae7b174ea5c5d1b5aba7"]
