@@ -64,7 +64,7 @@ func main() {
 	mux.HandleFunc("/health", healthHandler)
 
 	// Apply CORS and body size limit middleware to all requests
-	handler := middleware.CORS(corsOrigins)(middleware.MaxBodySize(maxBodySize)(mux))
+	handler := middleware.CORS(corsOrigins)(middleware.MaxBodySize(maxBodySize)(middleware.SecurityHeaders(mux)))
 
 	// Create server with timeouts
 	srv := &http.Server{
