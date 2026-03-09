@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"io"
 	"math"
+	// nosemgrep: go.lang.security.audit.crypto.math_random.math-random-used
+	// math/rand/v2 is used for non-security jitter in retry backoff timing.
+	// In Go 1.22+, math/rand/v2 is automatically seeded from crypto/rand.
 	"math/rand/v2"
 	"net"
 	"net/http"
