@@ -96,7 +96,7 @@ func TestIsDevelopmentMode_Development(t *testing.T) {
 	}{
 		{"development", true},
 		{"dev", true},
-		{"", true}, // default to dev when not set
+		{"", false}, // default to production mode for safety when not set
 		{"production", false},
 		{"prod", false},
 		{"staging", false},
