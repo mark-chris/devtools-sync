@@ -1,0 +1,99 @@
+# DevTools Sync - Production Deployment Template
+#
+# IMPORTANT: All environment variables below are REQUIRED for production.
+# Copy this file and replace placeholder values before deploying.
+#
+# Usage:
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Required environment variables (set in your deployment environment or .env file):
+#   POSTGRES_USER          - PostgreSQL username
+#   POSTGRES_PASSWORD      - PostgreSQL password (use a strong, unique password)
+#   POSTGRES_DB            - PostgreSQL database name
+#   DATABASE_URL           - Full connection string with sslmode=verify-full
+#   JWT_SECRET             - Minimum 32 characters, cryptographically random
+#   CORS_ALLOWED_ORIGINS   - Comma-separated list of allowed origins
+#   TLS_CERT_FILE          - Path to TLS certificate (if not using reverse proxy)
+#   TLS_KEY_FILE           - Path to TLS private key (if not using reverse proxy)
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL Database
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: devtools-sync-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - devtools-pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    # Do NOT expose port 5432 externally in production
+
+  # ---------------------------------------------------------------------------
+  # Management Server
+  # ---------------------------------------------------------------------------
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: devtools-sync-server
+    environment:
+      ENVIRONMENT: production
+      DATABASE_URL: ${DATABASE_URL}
+      SERVER_PORT: ${SERVER_PORT:-8080}
+      JWT_SECRET: ${JWT_SECRET}
+      MAX_BODY_SIZE: ${MAX_BODY_SIZE:-10MB}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
+      TLS_ENABLED: ${TLS_ENABLED:-false}
+      TLS_CERT_FILE: ${TLS_CERT_FILE:-}
+      TLS_KEY_FILE: ${TLS_KEY_FILE:-}
+      TLS_MIN_VERSION: ${TLS_MIN_VERSION:-1.2}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+    ports:
+      - "${SERVER_PORT:-8080}:${SERVER_PORT:-8080}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${SERVER_PORT:-8080}/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Dashboard
+  # ---------------------------------------------------------------------------
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: devtools-sync-dashboard
+    environment:
+      VITE_API_URL: ${VITE_API_URL}
+    ports:
+      - "3000:3000"
+    depends_on:
+      server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  devtools-pg-data:
+    name: devtools-sync-pg-data

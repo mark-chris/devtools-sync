@@ -49,8 +49,8 @@ func ValidateDatabaseURL(dbURL string, isDev bool) error {
 }
 
 // IsDevelopmentMode checks if the server is running in development mode
-// This is a convenience wrapper around the auth package's check
+// Defaults to production mode for safety when ENVIRONMENT is unset
 func IsDevelopmentMode() bool {
 	env := os.Getenv("ENVIRONMENT")
-	return env == "development" || env == "dev" || env == ""
+	return env == "development" || env == "dev"
 }

@@ -91,6 +91,8 @@ func main() {
 	log.Printf("Server starting in %s mode on port %s", mode, port)
 	if tlsEnabled {
 		log.Printf("TLS enabled (min version: %s)", os.Getenv("TLS_MIN_VERSION"))
+	} else if !isDev {
+		log.Printf("WARNING: TLS is not enabled in production mode. Set TLS_ENABLED=true or ensure a TLS-terminating reverse proxy is in front of this server.")
 	}
 	if len(corsOrigins) > 0 {
 		log.Printf("CORS allowed origins: %v", corsOrigins)
