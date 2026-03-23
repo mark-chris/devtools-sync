@@ -18,7 +18,7 @@
     "@eslint/js": "^9.39.2",
     "@testing-library/jest-dom": "^6.1.5",
     "@testing-library/react": "^16.3.2",
-    "@vitejs/plugin-react": "^5.1.4",
+    "@vitejs/plugin-react": "^6.0.1",
     "@vitest/coverage-v8": "^4.1.0",
     "eslint": "^9.39.2",
     "eslint-plugin-react": "^7.33.2",
@@ -26,7 +26,7 @@
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.4.0",
     "jsdom": "^29.0.1",
-    "vite": "^7.3.1",
+    "vite": "^8.0.0",
     "vitest": "^4.0.18"
   }
 }
