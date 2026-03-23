@@ -7,19 +7,19 @@ on:
     paths:
       - '**/Dockerfile*'
       - 'docker-compose*.yml'
-      - '.trivyignore'
+      - '.grype.yaml'
       - '.github/workflows/container-scan.yml'
   pull_request:
     branches: [main]
     paths:
       - '**/Dockerfile*'
       - 'docker-compose*.yml'
-      - '.trivyignore'
+      - '.grype.yaml'
   schedule:
     - cron: '0 8 * * 1'  # Weekly on Monday at 8 AM UTC
 
 jobs:
-  trivy-server:
+  grype-server:
     name: Scan Server Container
     runs-on: ubuntu-latest
     permissions:
@@ -31,24 +31,23 @@ jobs:
       - name: Build production server image
         run: docker build -f server/Dockerfile -t devtools-server:prod ./server
 
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+      - name: Run Grype vulnerability scanner
+        uses: anchore/scan-action@v6
+        id: grype-server
         with:
-          image-ref: 'devtools-server:prod'
-          format: 'sarif'
-          output: 'trivy-server-results.sarif'
-          severity: 'CRITICAL,HIGH'
-          exit-code: '1'  # Fail on findings - distroless should have minimal/no vulnerabilities
-          trivyignores: '.trivyignore'
+          image: 'devtools-server:prod'
+          output-format: 'sarif'
+          severity-cutoff: 'high'
+          fail-build: true
 
-      - name: Upload Trivy scan results to GitHub Security
+      - name: Upload Grype scan results to GitHub Security
         uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
-          sarif_file: 'trivy-server-results.sarif'
-          category: 'trivy-server'
+          sarif_file: ${{ steps.grype-server.outputs.sarif }}
+          category: 'grype-server'
 
-  trivy-dashboard:
+  grype-dashboard:
     name: Scan Dashboard Container
     runs-on: ubuntu-latest
     permissions:
@@ -60,20 +59,19 @@ jobs:
       - name: Build production dashboard image
         run: docker build -f dashboard/Dockerfile -t devtools-dashboard:prod ./dashboard
 
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+      - name: Run Grype vulnerability scanner
+        uses: anchore/scan-action@v6
+        id: grype-dashboard
         with:
-          image-ref: 'devtools-dashboard:prod'
-          format: 'sarif'
-          output: 'trivy-dashboard-results.sarif'
-          severity: 'CRITICAL,HIGH'
-          exit-code: '1'  # Fail on findings - distroless should have minimal/no vulnerabilities
-          trivyignores: '.trivyignore'
-          ignore-unfixed: true  # Ignore unfixed vulnerabilities (glibc CVEs pending Debian backport)
+          image: 'devtools-dashboard:prod'
+          output-format: 'sarif'
+          severity-cutoff: 'high'
+          fail-build: true
+          only-fixed: true  # Ignore unfixed vulnerabilities (glibc CVEs pending Debian backport)
 
-      - name: Upload Trivy scan results to GitHub Security
+      - name: Upload Grype scan results to GitHub Security
         uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
-          sarif_file: 'trivy-dashboard-results.sarif'
-          category: 'trivy-dashboard'
+          sarif_file: ${{ steps.grype-dashboard.outputs.sarif }}
+          category: 'grype-dashboard'
