@@ -32,7 +32,7 @@ jobs:
         run: docker build -f server/Dockerfile -t devtools-server:prod ./server
 
       - name: Run Grype vulnerability scanner
-        uses: anchore/scan-action@v6
+        uses: anchore/scan-action@v7
         id: grype-server
         with:
           image: 'devtools-server:prod'
@@ -60,7 +60,7 @@ jobs:
         run: docker build -f dashboard/Dockerfile -t devtools-dashboard:prod ./dashboard
 
       - name: Run Grype vulnerability scanner
-        uses: anchore/scan-action@v6
+        uses: anchore/scan-action@v7
         id: grype-dashboard
         with:
           image: 'devtools-dashboard:prod'
